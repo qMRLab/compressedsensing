@@ -20,6 +20,9 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
+# Temporary scratch files
+.tmp/
+
 # OS
 .DS_Store
 Thumbs.db
