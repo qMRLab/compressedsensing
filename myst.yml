@@ -1,0 +1,34 @@
+# See docs at: https://mystmd.org/guide/frontmatter
+version: 1
+project:
+  title: Compressed Sensing for MRI
+  subtitle: An interactive online course
+  keywords:
+    - compressed sensing
+    - MRI
+    - k-space
+    - sparsity
+    - education
+  github: https://github.com/mathieuboudreau/compressedsensing
+  open_access: true
+  license: CC-BY-4.0
+  abbreviations:
+    CS: Compressed Sensing
+    MRI: Magnetic Resonance Imaging
+    FFT: Fast Fourier Transform
+    SNR: Signal-to-Noise Ratio
+    PSF: Point Spread Function
+  exclude:
+    - README.md
+    - CLAUDE.md
+  toc:
+    - file: index.md
+    - title: Course Content
+      children:
+        - file: content/01_introduction.md
+        - file: content/02_mri_application.md
+site:
+  template: book-theme
+  options:
+    logo_text: CS for MRI
+    style: ./_static/custom.css

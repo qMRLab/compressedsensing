@@ -1,0 +1,9 @@
+# Python dependencies
+# mystmd is installed via npm (see .github/workflows/deploy.yml)
+
+numpy
+scipy
+plotly
+jupyter
+nbformat
+pytest

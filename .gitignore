@@ -1,0 +1,25 @@
+# Project reference folders (local only, not versioned)
+.paper/
+.templates/
+.external/
+
+# Claude instructions (local only)
+.CLAUDE.md
+
+# Jupyter Book build output
+_build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
