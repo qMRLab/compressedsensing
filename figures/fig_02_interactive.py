@@ -415,6 +415,122 @@ document.getElementById("sSlider").addEventListener("input", function() {{
 </html>"""
 
 
+def _render_embeddable_html(refs, combos, r_values, sigma_values):
+    """Render an embeddable HTML fragment (no DOCTYPE/html/head/body wrappers)."""
+    combos_json = {
+        mode: {str(R): inner for R, inner in by_r.items()}
+        for mode, by_r in combos.items()
+    }
+    r_default_idx = r_values.index(R_DEFAULT) if R_DEFAULT in r_values else 0
+    s_default_idx = sigma_values.index(SIGMA_DEFAULT) if SIGMA_DEFAULT in sigma_values else 0
+    r_show = r_values[r_default_idx]
+
+    return f"""<style>
+  .cs-fig-controls {{ display: flex; gap: 40px; justify-content: center;
+               align-items: center; flex-wrap: wrap; margin: 8px 0 4px; }}
+  .cs-fig-ctrl-group {{ display: flex; flex-direction: column; align-items: center; gap: 4px; }}
+  .cs-fig-controls label {{ font-size: 14px; color: #444; font-weight: bold; }}
+  .cs-fig-controls input[type=range] {{ width: 240px; cursor: pointer; accent-color: #555; }}
+  .cs-fig-controls select {{ font-size: 14px; padding: 4px 10px; border-radius: 6px;
+            border: 1px solid #ccc; cursor: pointer; background: white; }}
+  .cs-fig-val  {{ font-size: 14px; color: #111; min-width: 70px; text-align: center;
+           background: #eee; border-radius: 4px; padding: 2px 8px; }}
+  #cs-fig  {{ width: 100%; }}
+</style>
+
+<div class="cs-fig-controls">
+  <div class="cs-fig-ctrl-group">
+    <label>Sampling</label>
+    <select id="cs-modeSelect">
+      <option value="rand" selected>Random only</option>
+      <option value="uni">Uniform only</option>
+      <option value="both">Both overlaid</option>
+    </select>
+  </div>
+  <div class="cs-fig-ctrl-group">
+    <label>Acceleration R</label>
+    <input type="range" id="cs-rSlider"
+           min="0" max="{len(r_values)-1}" step="1" value="{r_default_idx}">
+    <span class="cs-fig-val" id="cs-rVal">R = {r_show}</span>
+  </div>
+  <div class="cs-fig-ctrl-group">
+    <label>Threshold &sigma;</label>
+    <input type="range" id="cs-sSlider"
+           min="0" max="{len(sigma_values)-1}" step="1" value="{s_default_idx}">
+    <span class="cs-fig-val" id="cs-sVal">&sigma; = {sigma_values[s_default_idx]}</span>
+  </div>
+</div>
+
+<div id="cs-fig"></div>
+
+<script>
+(function() {{
+  // Dynamically load Plotly.js, then initialize the figure
+  function initFigure() {{
+    const REFS     = {json.dumps(refs)};
+    const COMBOS   = {json.dumps(combos_json)};
+    const R_VALUES = {json.dumps(r_values)};
+    const S_VALUES = {json.dumps(sigma_values)};
+
+    let currentR     = R_VALUES[{r_default_idx}];
+    let currentSigma = S_VALUES[{s_default_idx}];
+    let currentMode  = "rand";
+
+    Plotly.newPlot("cs-fig", REFS[currentMode].data, REFS[currentMode].layout,
+                   {{responsive: true}});
+
+    function update() {{
+      const sigmaKey = currentSigma.toFixed(1);
+      const entries  = COMBOS[currentMode][String(currentR)][sigmaKey];
+      if (!entries) {{ console.error("No data for", currentMode, currentR, sigmaKey); return; }}
+
+      const titleEntry = entries[entries.length - 1];
+      const xyEntries  = entries.slice(0, -1);
+      const ref        = REFS[currentMode];
+
+      const newTraces = ref.data.map((base, i) => ({{
+        ...base,
+        x: xyEntries[i].x,
+        y: xyEntries[i].y,
+      }}));
+
+      Plotly.react("cs-fig", newTraces, ref.layout);
+      Plotly.relayout("cs-fig", {{ "title.text": titleEntry.title }});
+    }}
+
+    document.getElementById("cs-modeSelect").addEventListener("change", function() {{
+      currentMode = this.value;
+      const ref = REFS[currentMode];
+      Plotly.newPlot("cs-fig", ref.data, ref.layout, {{responsive: true}});
+      update();
+    }});
+
+    document.getElementById("cs-rSlider").addEventListener("input", function() {{
+      currentR = R_VALUES[+this.value];
+      document.getElementById("cs-rVal").textContent = "R = " + currentR;
+      update();
+    }});
+
+    document.getElementById("cs-sSlider").addEventListener("input", function() {{
+      currentSigma = S_VALUES[+this.value];
+      document.getElementById("cs-sVal").textContent = "\\u03c3 = " + currentSigma;
+      update();
+    }});
+  }}
+
+  // Load Plotly if not already available
+  if (typeof Plotly !== "undefined") {{
+    initFigure();
+  }} else {{
+    var s = document.createElement("script");
+    s.src = "https://cdn.plot.ly/plotly-2.35.2.min.js";
+    s.onload = initFigure;
+    document.head.appendChild(s);
+  }}
+}})();
+</script>"""
+
+
 # ── public API ─────────────────────────────────────────────────────────────────
 
 def make_html_string(
@@ -426,6 +542,21 @@ def make_html_string(
     """Return the complete interactive HTML as a string (no file I/O)."""
     refs, combos = precompute(positions, heights, r_values, sigma_values)
     return _render_html(refs, combos, r_values, sigma_values)
+
+
+def make_embeddable_html(
+    positions=DEFAULT_POSITIONS,
+    heights=DEFAULT_HEIGHTS,
+    r_values=R_VALUES,
+    sigma_values=SIGMA_VALUES,
+):
+    """Return an HTML fragment (no <html>/<head>/<body>) for embedding in a page.
+
+    Suitable for use with IPython.display.HTML inside a Jupyter notebook
+    that will be rendered by MyST.
+    """
+    refs, combos = precompute(positions, heights, r_values, sigma_values)
+    return _render_embeddable_html(refs, combos, r_values, sigma_values)
 
 
 def write_interactive_html(

@@ -37,3 +37,24 @@ h1 {
 .fa, .far, .fas {
   color: red;
 }
+
+/* Hide right sidebar (on-page TOC / chapter headings) */
+.col-margin-right {
+  display: none !important;
+}
+
+/* Shrink left sidebar */
+.myst-primary-sidebar {
+  max-width: 220px !important;
+}
+
+/* With right sidebar hidden, make all article content span to page-end
+   instead of the default body-end, filling the freed space. */
+article.article > * {
+  grid-column: body-start / page-end !important;
+}
+
+/* Keep the frontmatter header spanning full screen width */
+article.article > .myst-fm-block {
+  grid-column: page-start / page-end !important;
+}
