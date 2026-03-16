@@ -298,12 +298,17 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
                          range=img_yrange, row=row, col=1)
         fig.update_xaxes(range=[-5, N + 5], row=row, col=1)
 
-    # Right column: k-space
+    # Right column: k-space — identical x-range and y-range on all panels
+    k_xrange = [-N // 2 - 2, N // 2 + 2]
+    k_ymax = max(k_mag_full)
+    k_yrange = [-k_ymax * 0.05, k_ymax * 1.1]
     for row in [1, 2, 3]:
         fig.update_xaxes(title_text="k",
-                         title_font=dict(size=AXIS_SIZE), row=row, col=2)
+                         title_font=dict(size=AXIS_SIZE),
+                         range=k_xrange, row=row, col=2)
         fig.update_yaxes(title_text="|X(k)|",
-                         title_font=dict(size=AXIS_SIZE), row=row, col=2)
+                         title_font=dict(size=AXIS_SIZE),
+                         range=k_yrange, row=row, col=2)
 
     # Annotation panels — hide axes and fix range for centered text
     for (r, c) in [(3, 1), (4, 2), (5, 2)]:
