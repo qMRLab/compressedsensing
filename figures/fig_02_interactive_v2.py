@@ -111,6 +111,30 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
 
     n_kept = N // R
 
+    # ── Normalize (c) and (g) by ×R so all image-space panels share the
+    #    same amplitude scale as (a) true signal and (i) final recon.
+    #    Plot magnitude (abs) in image space — no negatives. ──────────────
+    x_samp_norm = np.abs(res["x_samp"] * R)
+    thr1_norm   = abs(res["thr1"] * R)
+    x_res1_norm = np.abs(res["x_res1"] * R)
+    thr2_norm   = abs(res["thr2"] * R)
+    x_combined_mag = np.abs(res["x_combined"])
+
+    # Common y-range for all left-column (image-space) panels
+    y_max = float(max(signal.max(),
+                      x_samp_norm.max(),
+                      x_res1_norm.max(),
+                      x_combined_mag.max()))
+    y_pad = y_max * 0.15
+    img_yrange = [-y_pad * 0.2, y_max + y_pad]
+
+    # ── font sizes (publication quality) ─────────────────────────────────
+    TITLE_SIZE  = 24
+    AXIS_SIZE   = 20
+    TICK_SIZE   = 16
+    ANNOT_SIZE  = 26
+    LEGEND_SIZE = 18
+
     # ── 5×2 subplot grid ─────────────────────────────────────────────────
     fig = make_subplots(
         rows=5, cols=2,
@@ -125,112 +149,114 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
         horizontal_spacing=0.14,
     )
 
+    # Double subplot title font sizes
+    for ann in fig.layout.annotations:
+        ann.font.size = TITLE_SIZE
+
     # ── Row 1, Col 1: True signal (stem) ─────────────────────────────────
     sx, sy = _stem_xy(signal)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="steelblue", width=1), hoverinfo="skip",
+        line=dict(color="steelblue", width=2), hoverinfo="skip",
         showlegend=False), row=1, col=1)
     fig.add_trace(go.Scatter(x=t, y=signal.tolist(), mode="markers",
-        marker=dict(color="steelblue", size=4), showlegend=False,
+        marker=dict(color="steelblue", size=6), showlegend=False,
         hovertemplate="t=%{x}<br>amp=%{y:.2f}<extra>true</extra>"),
         row=1, col=1)
 
     # ── Row 1, Col 2: True k-space + acquired points ─────────────────────
     fig.add_trace(go.Scatter(x=k_axis, y=k_mag_full, mode="lines",
-        line=dict(color="steelblue", width=0.8), showlegend=False,
+        line=dict(color="steelblue", width=1.6), showlegend=False,
         hoverinfo="skip"), row=1, col=2)
     acq_k   = [int(i) - N // 2 for i in idx]
     acq_mag = [k_mag_full[i] for i in idx]
     fig.add_trace(go.Scatter(x=acq_k, y=acq_mag, mode="markers",
-        marker=dict(color="red", size=4),
+        marker=dict(color="red", size=6),
         name=f"{n_kept} acquired", showlegend=True,
         hovertemplate="k=%{x}<br>|X|=%{y:.2f}<extra>acquired</extra>"),
         row=1, col=2)
 
-    # ── Row 2, Col 1: Recon iter 1 + threshold ───────────────────────────
-    sx, sy = _stem_xy(res["x_samp"])
+    # ── Row 2, Col 1: Recon iter 1 (magnitude, normalized ×R) + threshold
+    sx, sy = _stem_xy(x_samp_norm)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="green", width=0.8), hoverinfo="skip",
+        line=dict(color="green", width=1.6), hoverinfo="skip",
         showlegend=False), row=2, col=1)
-    fig.add_trace(go.Scatter(x=t, y=res["x_samp"].tolist(), mode="markers",
-        marker=dict(color="green", size=3), showlegend=False,
+    fig.add_trace(go.Scatter(x=t, y=x_samp_norm.tolist(), mode="markers",
+        marker=dict(color="green", size=5), showlegend=False,
         hovertemplate="t=%{x}<br>%{y:.3f}<extra>recon iter1</extra>"),
         row=2, col=1)
-    # threshold lines
-    for sign in [1, -1]:
-        fig.add_trace(go.Scatter(
-            x=[0, N-1], y=[sign * res["thr1"], sign * res["thr1"]],
-            mode="lines", line=dict(color=C_THR, width=1.5, dash="dot"),
-            hoverinfo="skip", showlegend=False), row=2, col=1)
-    # vertical markers at true positions
+    # threshold line (positive only — magnitude plot)
+    fig.add_trace(go.Scatter(
+        x=[0, N-1], y=[thr1_norm, thr1_norm],
+        mode="lines", line=dict(color=C_THR, width=3, dash="dot"),
+        hoverinfo="skip", showlegend=False), row=2, col=1)
     for p in positions:
-        fig.add_vline(x=p, line_width=0.7, line_dash="dash",
+        fig.add_vline(x=p, line_width=1.4, line_dash="dash",
                       line_color="lightgray", row=2, col=1)
 
     # ── Row 2, Col 2: K-space of detected components ─────────────────────
     k_det_mag = np.abs(np.fft.fftshift(res["k_det"])).tolist()
     fig.add_trace(go.Scatter(x=k_axis, y=k_det_mag, mode="lines",
-        line=dict(color="red", width=0.8), showlegend=False,
+        line=dict(color="red", width=1.6), showlegend=False,
         hovertemplate="k=%{x}<br>|X|=%{y:.3f}<extra>k detected</extra>"),
         row=2, col=2)
 
     # ── Row 3, Col 1: Annotation (empty plot with text) ──────────────────
     fig.add_trace(go.Scatter(x=[0.5], y=[0.5], mode="text",
         text=["← subtract (d) from (b) →"],
-        textfont=dict(size=13, color="gray"),
+        textfont=dict(size=ANNOT_SIZE, color="gray"),
         showlegend=False, hoverinfo="skip"), row=3, col=1)
 
     # ── Row 3, Col 2: Residual k-space ───────────────────────────────────
     k_res_mag = np.abs(np.fft.fftshift(res["k_res1"])).tolist()
     fig.add_trace(go.Scatter(x=k_axis, y=k_res_mag, mode="lines",
-        line=dict(color="gray", width=0.8), showlegend=False,
+        line=dict(color="gray", width=1.6), showlegend=False,
         hovertemplate="k=%{x}<br>|X|=%{y:.3f}<extra>residual k</extra>"),
         row=3, col=2)
 
-    # ── Row 4, Col 1: Recon iter 2 + threshold ───────────────────────────
-    sx, sy = _stem_xy(res["x_res1"])
+    # ── Row 4, Col 1: Recon iter 2 (magnitude, normalized ×R) + threshold
+    sx, sy = _stem_xy(x_res1_norm)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="gray", width=0.8), hoverinfo="skip",
+        line=dict(color="gray", width=1.6), hoverinfo="skip",
         showlegend=False), row=4, col=1)
-    fig.add_trace(go.Scatter(x=t, y=res["x_res1"].tolist(), mode="markers",
-        marker=dict(color="gray", size=3), showlegend=False,
+    fig.add_trace(go.Scatter(x=t, y=x_res1_norm.tolist(), mode="markers",
+        marker=dict(color="gray", size=5), showlegend=False,
         hovertemplate="t=%{x}<br>%{y:.3f}<extra>residual</extra>"),
         row=4, col=1)
-    for sign in [1, -1]:
-        fig.add_trace(go.Scatter(
-            x=[0, N-1], y=[sign * res["thr2"], sign * res["thr2"]],
-            mode="lines", line=dict(color=C_THR, width=1.5, dash="dot"),
-            hoverinfo="skip", showlegend=False), row=4, col=1)
+    # threshold line (positive only — magnitude plot)
+    fig.add_trace(go.Scatter(
+        x=[0, N-1], y=[thr2_norm, thr2_norm],
+        mode="lines", line=dict(color=C_THR, width=3, dash="dot"),
+        hoverinfo="skip", showlegend=False), row=4, col=1)
     for p in positions:
-        fig.add_vline(x=p, line_width=0.7, line_dash="dash",
+        fig.add_vline(x=p, line_width=1.4, line_dash="dash",
                       line_color="lightgray", row=4, col=1)
 
     # ── Row 4, Col 2: Annotation ─────────────────────────────────────────
     fig.add_trace(go.Scatter(x=[0.5], y=[0.5], mode="text",
         text=[f"Iter 2 recovered peaks:<br>{res['peaks2']}"],
-        textfont=dict(size=13, color="gray"),
+        textfont=dict(size=ANNOT_SIZE, color="gray"),
         showlegend=False, hoverinfo="skip"), row=4, col=2)
 
-    # ── Row 5, Col 1: Full reconstruction ────────────────────────────────
-    sx, sy = _stem_xy(res["x_combined"])
+    # ── Row 5, Col 1: Full reconstruction (magnitude) ──────────────────
+    sx, sy = _stem_xy(x_combined_mag)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="purple", width=0.8), hoverinfo="skip",
+        line=dict(color="purple", width=1.6), hoverinfo="skip",
         showlegend=False), row=5, col=1)
-    fig.add_trace(go.Scatter(x=t, y=res["x_combined"].tolist(), mode="markers",
-        marker=dict(color="purple", size=3), showlegend=False,
+    fig.add_trace(go.Scatter(x=t, y=x_combined_mag.tolist(), mode="markers",
+        marker=dict(color="purple", size=5), showlegend=False,
         hovertemplate="t=%{x}<br>%{y:.3f}<extra>final recon</extra>"),
         row=5, col=1)
     # ground truth overlay
     true_x = [i for i, v in enumerate(signal) if v != 0]
     true_y = [float(v) for v in signal if v != 0]
     fig.add_trace(go.Scatter(x=true_x, y=true_y, mode="markers",
-        marker=dict(color="gray", size=10, symbol="circle-open",
-                    line=dict(width=2, color="gray")),
+        marker=dict(color="gray", size=14, symbol="circle-open",
+                    line=dict(width=4, color="gray")),
         showlegend=False,
         hovertemplate="t=%{x}<br>true=%{y:.2f}<extra>ground truth</extra>"),
         row=5, col=1)
     for p in positions:
-        fig.add_vline(x=p, line_width=0.7, line_dash="dash",
+        fig.add_vline(x=p, line_width=1.4, line_dash="dash",
                       line_color="lightgray", row=5, col=1)
 
     # ── Row 5, Col 2: Empty ──────────────────────────────────────────────
@@ -243,30 +269,41 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
             text=(f"<b>Compressed Sensing — Figure 2</b>   "
                   f"R={R}  ({n_kept}/{N} k-samples)   σ={sigma1}"),
             x=0.5,
+            font=dict(size=TITLE_SIZE),
         ),
-        height=1400,
+        height=1600,
         autosize=True,
         paper_bgcolor="white", plot_bgcolor="white",
-        legend=dict(x=0.75, y=0.95, font=dict(size=10)),
-        margin=dict(l=70, r=30, t=80, b=40),
+        legend=dict(x=0.75, y=0.95, font=dict(size=LEGEND_SIZE)),
+        margin=dict(l=80, r=30, t=100, b=50),
     )
 
-    # axis labels
+    # ── Axis styling: borders, grid, font sizes ──────────────────────────
+    border_kw = dict(showline=True, linewidth=2, linecolor="black", mirror=True)
     for row in range(1, 6):
         for col in range(1, 3):
-            fig.update_xaxes(showgrid=True, gridcolor="#eee", row=row, col=col)
-            fig.update_yaxes(showgrid=True, gridcolor="#eee", row=row, col=col)
+            fig.update_xaxes(showgrid=True, gridcolor="#ddd",
+                             tickfont=dict(size=TICK_SIZE), **border_kw,
+                             row=row, col=col)
+            fig.update_yaxes(showgrid=True, gridcolor="#ddd",
+                             tickfont=dict(size=TICK_SIZE), **border_kw,
+                             row=row, col=col)
 
-    # Left column: signal domain
+    # Left column: signal domain — identical y-range on all panels
     for row in [1, 2, 4, 5]:
-        fig.update_xaxes(title_text="Sample index", row=row, col=1)
-        fig.update_yaxes(title_text="Amplitude", row=row, col=1)
+        fig.update_xaxes(title_text="Sample index",
+                         title_font=dict(size=AXIS_SIZE), row=row, col=1)
+        fig.update_yaxes(title_text="Amplitude",
+                         title_font=dict(size=AXIS_SIZE),
+                         range=img_yrange, row=row, col=1)
         fig.update_xaxes(range=[-5, N + 5], row=row, col=1)
 
     # Right column: k-space
     for row in [1, 2, 3]:
-        fig.update_xaxes(title_text="k", row=row, col=2)
-        fig.update_yaxes(title_text="|X(k)|", row=row, col=2)
+        fig.update_xaxes(title_text="k",
+                         title_font=dict(size=AXIS_SIZE), row=row, col=2)
+        fig.update_yaxes(title_text="|X(k)|",
+                         title_font=dict(size=AXIS_SIZE), row=row, col=2)
 
     # Annotation panels — hide axes and fix range for centered text
     for (r, c) in [(3, 1), (4, 2), (5, 2)]:
