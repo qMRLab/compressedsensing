@@ -50,7 +50,7 @@ def _run(signal, kspace_full, mask, R, sigma1, sigma2=SIGMA2):
         np.abs(np.where(np.abs(x_samp) >= thr1, x_samp, 0.0)), height=thr1 * 0.9
     )
     x_rec1 = np.zeros(N)
-    x_rec1[peaks1] = x_samp[peaks1] * R
+    x_rec1[peaks1] = np.abs(x_samp[peaks1]) * R
     k_rec1 = np.where(mask, np.fft.fft(x_rec1), 0)
     k_res1 = k_samp - k_rec1
     x_res1 = np.fft.ifft(k_res1).real
@@ -60,7 +60,7 @@ def _run(signal, kspace_full, mask, R, sigma1, sigma2=SIGMA2):
         np.abs(np.where(np.abs(x_res1) >= thr2, x_res1, 0.0)), height=thr2 * 0.9
     )
     x_rec2 = np.zeros(N)
-    x_rec2[peaks2] = x_res1[peaks2] * R
+    x_rec2[peaks2] = np.abs(x_res1[peaks2]) * R
     x_combined = x_rec1.copy()
     for p in peaks2:
         x_combined[p] += x_rec2[p]
@@ -100,11 +100,7 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
         res = _run(signal, kspace_full, mask_uni, R, sigma1)
         idx = idx_uni
         label = "Uniform"
-    elif mode == "rand":
-        res = _run(signal, kspace_full, mask_rand, R, sigma1)
-        idx = idx_rand
-        label = "Random"
-    else:  # "both" — use random for the pipeline display
+    else:  # "rand"
         res = _run(signal, kspace_full, mask_rand, R, sigma1)
         idx = idx_rand
         label = "Random"
@@ -344,15 +340,15 @@ def precompute(
     R0, s0 = R_DEFAULT, SIGMA_DEFAULT
     mu0, mr0, iu0, ir0 = masks[R0]
     refs = {}
-    for mode in ("uni", "rand", "both"):
+    for mode in ("uni", "rand"):
         rf = _build_fig(signal, kspace_full, mu0, mr0, iu0, ir0,
                         R0, s0, positions, mode=mode)
         refs[mode] = json.loads(rf.to_json())
 
-    combos = {mode: {} for mode in ("uni", "rand", "both")}
+    combos = {mode: {} for mode in ("uni", "rand")}
     for R in r_values:
         mu, mr, iu, ir = masks[R]
-        for mode in ("uni", "rand", "both"):
+        for mode in ("uni", "rand"):
             combos[mode][R] = {}
             for sigma1 in sigma_values:
                 f = _build_fig(signal, kspace_full, mu, mr, iu, ir,
@@ -390,9 +386,8 @@ def _render_embeddable_html(refs, combos, r_values, sigma_values):
   <div class="cs-fig-ctrl-group">
     <label>Sampling</label>
     <select id="cs-modeSelect">
-      <option value="rand" selected>Random only</option>
-      <option value="uni">Uniform only</option>
-      <option value="both">Both overlaid</option>
+      <option value="rand" selected>Random</option>
+      <option value="uni">Uniform</option>
     </select>
   </div>
   <div class="cs-fig-ctrl-group">
