@@ -27,15 +27,15 @@ except ModuleNotFoundError:
 # ── defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_POSITIONS = [10, 50, 100]
 DEFAULT_HEIGHTS   = [1.0, 0.85, 0.40]
-R_VALUES     = [2, 3, 4, 6, 8]
-SIGMA_VALUES = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
+R_VALUES     = [2, 3, 4]
+SIGMA_VALUES = [2.0, 3.0, 4.0]
 SIGMA2       = 3.0
 N            = 128
 SEED         = 42
-R_DEFAULT    = 4
-SIGMA_DEFAULT= 5.0
+R_DEFAULT    = 2
+SIGMA_DEFAULT= 3.0
 
-C_THR  = "#e53935"
+C_THR  = "navy"
 
 
 # ── CS pipeline ───────────────────────────────────────────────────────────────
@@ -156,48 +156,52 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
     # ── Row 1, Col 1: True signal (stem) ─────────────────────────────────
     sx, sy = _stem_xy(signal)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="steelblue", width=2), hoverinfo="skip",
+        line=dict(color="steelblue", width=4), hoverinfo="skip",
         showlegend=False), row=1, col=1)
     fig.add_trace(go.Scatter(x=t, y=signal.tolist(), mode="markers",
-        marker=dict(color="steelblue", size=6), showlegend=False,
+        marker=dict(color="steelblue", size=12), showlegend=False,
         hovertemplate="t=%{x}<br>amp=%{y:.2f}<extra>true</extra>"),
         row=1, col=1)
 
-    # ── Row 1, Col 2: True k-space + acquired points ─────────────────────
+    # ── Acquired-sample dot y-level: 10% above max k-space magnitude ────
+    k_ymax = max(k_mag_full)
+    acq_dot_y = k_ymax * 1.10
+    acq_k = [int(i) - N // 2 for i in idx]
+
+    # ── Row 1, Col 2: True k-space + sampled trace (green) + dots ───────
     fig.add_trace(go.Scatter(x=k_axis, y=k_mag_full, mode="lines",
-        line=dict(color="steelblue", width=1.6), showlegend=False,
+        line=dict(color="steelblue", width=3.2), showlegend=False,
         hoverinfo="skip"), row=1, col=2)
-    acq_k   = [int(i) - N // 2 for i in idx]
-    acq_mag = [k_mag_full[i] for i in idx]
-    fig.add_trace(go.Scatter(x=acq_k, y=acq_mag, mode="markers",
-        marker=dict(color="red", size=6),
-        name=f"{n_kept} acquired", showlegend=True,
-        hovertemplate="k=%{x}<br>|X|=%{y:.2f}<extra>acquired</extra>"),
+    fig.add_trace(go.Scatter(x=acq_k, y=[acq_dot_y] * len(acq_k),
+        mode="markers", marker=dict(color="red", size=8),
+        showlegend=False,
+        hovertemplate="k=%{x}<br>acquired<extra></extra>"),
         row=1, col=2)
 
     # ── Row 2, Col 1: Recon iter 1 (magnitude, normalized ×R) + threshold
     sx, sy = _stem_xy(x_samp_norm)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="green", width=1.6), hoverinfo="skip",
+        line=dict(color="green", width=3.2), hoverinfo="skip",
         showlegend=False), row=2, col=1)
     fig.add_trace(go.Scatter(x=t, y=x_samp_norm.tolist(), mode="markers",
-        marker=dict(color="green", size=5), showlegend=False,
+        marker=dict(color="green", size=10), showlegend=False,
         hovertemplate="t=%{x}<br>%{y:.3f}<extra>recon iter1</extra>"),
         row=2, col=1)
     # threshold line (positive only — magnitude plot)
     fig.add_trace(go.Scatter(
         x=[0, N-1], y=[thr1_norm, thr1_norm],
-        mode="lines", line=dict(color=C_THR, width=3, dash="dot"),
+        mode="lines", line=dict(color=C_THR, width=6, dash="dot"),
         hoverinfo="skip", showlegend=False), row=2, col=1)
-    for p in positions:
-        fig.add_vline(x=p, line_width=1.4, line_dash="dash",
-                      line_color="lightgray", row=2, col=1)
 
     # ── Row 2, Col 2: K-space of detected components ─────────────────────
     k_det_mag = np.abs(np.fft.fftshift(res["k_det"])).tolist()
     fig.add_trace(go.Scatter(x=k_axis, y=k_det_mag, mode="lines",
-        line=dict(color="red", width=1.6), showlegend=False,
+        line=dict(color="purple", width=3.2), showlegend=False,
         hovertemplate="k=%{x}<br>|X|=%{y:.3f}<extra>k detected</extra>"),
+        row=2, col=2)
+    fig.add_trace(go.Scatter(x=acq_k, y=[acq_dot_y] * len(acq_k),
+        mode="markers", marker=dict(color="red", size=8),
+        showlegend=False, hoverinfo="skip"),
         row=2, col=2)
 
     # ── Row 3, Col 1: Annotation (empty plot with text) ──────────────────
@@ -209,27 +213,28 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
     # ── Row 3, Col 2: Residual k-space ───────────────────────────────────
     k_res_mag = np.abs(np.fft.fftshift(res["k_res1"])).tolist()
     fig.add_trace(go.Scatter(x=k_axis, y=k_res_mag, mode="lines",
-        line=dict(color="gray", width=1.6), showlegend=False,
+        line=dict(color="red", width=3.2), showlegend=False,
         hovertemplate="k=%{x}<br>|X|=%{y:.3f}<extra>residual k</extra>"),
+        row=3, col=2)
+    fig.add_trace(go.Scatter(x=acq_k, y=[acq_dot_y] * len(acq_k),
+        mode="markers", marker=dict(color="red", size=8),
+        showlegend=False, hoverinfo="skip"),
         row=3, col=2)
 
     # ── Row 4, Col 1: Recon iter 2 (magnitude, normalized ×R) + threshold
     sx, sy = _stem_xy(x_res1_norm)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="gray", width=1.6), hoverinfo="skip",
+        line=dict(color="red", width=3.2), hoverinfo="skip",
         showlegend=False), row=4, col=1)
     fig.add_trace(go.Scatter(x=t, y=x_res1_norm.tolist(), mode="markers",
-        marker=dict(color="gray", size=5), showlegend=False,
+        marker=dict(color="red", size=10), showlegend=False,
         hovertemplate="t=%{x}<br>%{y:.3f}<extra>residual</extra>"),
         row=4, col=1)
     # threshold line (positive only — magnitude plot)
     fig.add_trace(go.Scatter(
         x=[0, N-1], y=[thr2_norm, thr2_norm],
-        mode="lines", line=dict(color=C_THR, width=3, dash="dot"),
+        mode="lines", line=dict(color=C_THR, width=6, dash="dot"),
         hoverinfo="skip", showlegend=False), row=4, col=1)
-    for p in positions:
-        fig.add_vline(x=p, line_width=1.4, line_dash="dash",
-                      line_color="lightgray", row=4, col=1)
 
     # ── Row 4, Col 2: Annotation ─────────────────────────────────────────
     fig.add_trace(go.Scatter(x=[0.5], y=[0.5], mode="text",
@@ -240,24 +245,12 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
     # ── Row 5, Col 1: Full reconstruction (magnitude) ──────────────────
     sx, sy = _stem_xy(x_combined_mag)
     fig.add_trace(go.Scatter(x=sx, y=sy, mode="lines",
-        line=dict(color="purple", width=1.6), hoverinfo="skip",
+        line=dict(color="purple", width=3.2), hoverinfo="skip",
         showlegend=False), row=5, col=1)
     fig.add_trace(go.Scatter(x=t, y=x_combined_mag.tolist(), mode="markers",
-        marker=dict(color="purple", size=5), showlegend=False,
+        marker=dict(color="purple", size=10), showlegend=False,
         hovertemplate="t=%{x}<br>%{y:.3f}<extra>final recon</extra>"),
         row=5, col=1)
-    # ground truth overlay
-    true_x = [i for i, v in enumerate(signal) if v != 0]
-    true_y = [float(v) for v in signal if v != 0]
-    fig.add_trace(go.Scatter(x=true_x, y=true_y, mode="markers",
-        marker=dict(color="gray", size=14, symbol="circle-open",
-                    line=dict(width=4, color="gray")),
-        showlegend=False,
-        hovertemplate="t=%{x}<br>true=%{y:.2f}<extra>ground truth</extra>"),
-        row=5, col=1)
-    for p in positions:
-        fig.add_vline(x=p, line_width=1.4, line_dash="dash",
-                      line_color="lightgray", row=5, col=1)
 
     # ── Row 5, Col 2: Empty ──────────────────────────────────────────────
     fig.add_trace(go.Scatter(x=[], y=[], mode="markers",
@@ -265,17 +258,11 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
 
     # ── Layout polish ────────────────────────────────────────────────────
     fig.update_layout(
-        title=dict(
-            text=(f"<b>Compressed Sensing — Figure 2</b>   "
-                  f"R={R}  ({n_kept}/{N} k-samples)   σ={sigma1}"),
-            x=0.5,
-            font=dict(size=TITLE_SIZE),
-        ),
         height=1600,
         autosize=True,
         paper_bgcolor="white", plot_bgcolor="white",
         legend=dict(x=0.75, y=0.95, font=dict(size=LEGEND_SIZE)),
-        margin=dict(l=80, r=30, t=100, b=50),
+        margin=dict(l=80, r=30, t=60, b=50),
     )
 
     # ── Axis styling: borders, grid, font sizes ──────────────────────────
@@ -299,9 +286,9 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
         fig.update_xaxes(range=[-5, N + 5], row=row, col=1)
 
     # Right column: k-space — identical x-range and y-range on all panels
+    # acq_dot_y is at k_ymax*1.10; leave room above dots
     k_xrange = [-N // 2 - 2, N // 2 + 2]
-    k_ymax = max(k_mag_full)
-    k_yrange = [-k_ymax * 0.05, k_ymax * 1.1]
+    k_yrange = [-k_ymax * 0.05, k_ymax * 1.25]
     for row in [1, 2, 3]:
         fig.update_xaxes(title_text="k",
                          title_font=dict(size=AXIS_SIZE),
@@ -372,9 +359,7 @@ def precompute(
                                R, sigma1, positions, mode=mode)
                 key = f"{sigma1:.1f}"
                 xy  = _extract_xy(f)
-                title = (f"<b>Compressed Sensing — Figure 2</b>   "
-                         f"R={R}  ({n//R}/{n} k-samples)   σ={sigma1}")
-                xy.append({"title": title})
+                xy.append({"title": ""})
                 combos[mode][R][key] = xy
 
     return refs, combos
@@ -396,11 +381,8 @@ def _render_embeddable_html(refs, combos, r_values, sigma_values):
                align-items: center; flex-wrap: wrap; margin: 8px 0 4px; }}
   .cs-fig-ctrl-group {{ display: flex; flex-direction: column; align-items: center; gap: 4px; }}
   .cs-fig-controls label {{ font-size: 14px; color: #444; font-weight: bold; }}
-  .cs-fig-controls input[type=range] {{ width: 240px; cursor: pointer; accent-color: #555; }}
   .cs-fig-controls select {{ font-size: 14px; padding: 4px 10px; border-radius: 6px;
             border: 1px solid #ccc; cursor: pointer; background: white; }}
-  .cs-fig-val  {{ font-size: 14px; color: #111; min-width: 70px; text-align: center;
-           background: #eee; border-radius: 4px; padding: 2px 8px; }}
   #cs-fig  {{ width: 100%; margin: 0 auto; }}
 </style>
 
@@ -415,15 +397,15 @@ def _render_embeddable_html(refs, combos, r_values, sigma_values):
   </div>
   <div class="cs-fig-ctrl-group">
     <label>Acceleration R</label>
-    <input type="range" id="cs-rSlider"
-           min="0" max="{len(r_values)-1}" step="1" value="{r_default_idx}">
-    <span class="cs-fig-val" id="cs-rVal">R = {r_show}</span>
+    <select id="cs-rSelect">
+      {"".join(f'<option value="{R}"{" selected" if R == R_DEFAULT else ""}>{R}×</option>' for R in r_values)}
+    </select>
   </div>
   <div class="cs-fig-ctrl-group">
     <label>Threshold &sigma;</label>
-    <input type="range" id="cs-sSlider"
-           min="0" max="{len(sigma_values)-1}" step="1" value="{s_default_idx}">
-    <span class="cs-fig-val" id="cs-sVal">&sigma; = {sigma_values[s_default_idx]}</span>
+    <select id="cs-sSelect">
+      {"".join(f'<option value="{s}"{" selected" if s == SIGMA_DEFAULT else ""}>{s:.0f}&sigma;</option>' for s in sigma_values)}
+    </select>
   </div>
 </div>
 
@@ -477,15 +459,13 @@ def _render_embeddable_html(refs, combos, r_values, sigma_values):
       update();
     }});
 
-    document.getElementById("cs-rSlider").addEventListener("input", function() {{
-      currentR = R_VALUES[+this.value];
-      document.getElementById("cs-rVal").textContent = "R = " + currentR;
+    document.getElementById("cs-rSelect").addEventListener("change", function() {{
+      currentR = +this.value;
       update();
     }});
 
-    document.getElementById("cs-sSlider").addEventListener("input", function() {{
-      currentSigma = S_VALUES[+this.value];
-      document.getElementById("cs-sVal").textContent = "\\u03c3 = " + currentSigma;
+    document.getElementById("cs-sSelect").addEventListener("change", function() {{
+      currentSigma = +this.value;
       update();
     }});
   }}
