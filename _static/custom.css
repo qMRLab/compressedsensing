@@ -48,13 +48,14 @@ h1 {
   max-width: 220px !important;
 }
 
-/* With right sidebar hidden, make all article content span to page-end
-   instead of the default body-end, filling the freed space. */
+/* With right sidebar hidden, widen all article content from default 'body'
+   to 'page' (body + margins + former sidebar area). */
 article.article > * {
-  grid-column: body-start / page-end !important;
+  grid-column: page !important;
 }
 
-/* Keep the frontmatter header spanning full screen width */
-article.article > .myst-fm-block {
-  grid-column: page-start / page-end !important;
+/* Notebook output blocks with figures: go full screen width */
+article.article > .myst-jp-nb-block [data-name="outputs-container"] {
+  max-width: none !important;
+  width: 100% !important;
 }

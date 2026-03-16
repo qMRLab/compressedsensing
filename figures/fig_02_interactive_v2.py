@@ -117,12 +117,12 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
         subplot_titles=[
             "(a) True signal", "(b) True k-space",
             f"(c) Recon iter 1 ({sigma1}σ thr)", f"(d) K-space of detected (peaks: {res['peaks1']})",
-            "← subtract (d) from (b) →", "(f) Residual k-space",
-            f"(g) Recon iter 2 ({SIGMA2}σ thr)", f"Iter 2 peaks: {res['peaks2']}",
+            "", "(f) Residual k-space",
+            f"(g) Recon iter 2 ({SIGMA2}σ thr)", "",
             "(i) Full reconstruction", "",
         ],
         vertical_spacing=0.06,
-        horizontal_spacing=0.10,
+        horizontal_spacing=0.14,
     )
 
     # ── Row 1, Col 1: True signal (stem) ─────────────────────────────────
@@ -248,7 +248,7 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
         autosize=True,
         paper_bgcolor="white", plot_bgcolor="white",
         legend=dict(x=0.75, y=0.95, font=dict(size=10)),
-        margin=dict(l=60, r=30, t=80, b=40),
+        margin=dict(l=70, r=30, t=80, b=40),
     )
 
     # axis labels
@@ -266,15 +266,12 @@ def _build_fig(signal, kspace_full, mask_uni, mask_rand, idx_uni, idx_rand,
     # Right column: k-space
     for row in [1, 2, 3]:
         fig.update_xaxes(title_text="k", row=row, col=2)
-        fig.update_yaxes(title_text="|K-space|", row=row, col=2)
+        fig.update_yaxes(title_text="|X(k)|", row=row, col=2)
 
-    # Annotation panels — hide axes
-    fig.update_xaxes(visible=False, row=3, col=1)
-    fig.update_yaxes(visible=False, row=3, col=1)
-    fig.update_xaxes(visible=False, row=4, col=2)
-    fig.update_yaxes(visible=False, row=4, col=2)
-    fig.update_xaxes(visible=False, row=5, col=2)
-    fig.update_yaxes(visible=False, row=5, col=2)
+    # Annotation panels — hide axes and fix range for centered text
+    for (r, c) in [(3, 1), (4, 2), (5, 2)]:
+        fig.update_xaxes(visible=False, range=[0, 1], row=r, col=c)
+        fig.update_yaxes(visible=False, range=[0, 1], row=r, col=c)
 
     return fig
 
@@ -362,7 +359,7 @@ def _render_embeddable_html(refs, combos, r_values, sigma_values):
             border: 1px solid #ccc; cursor: pointer; background: white; }}
   .cs-fig-val  {{ font-size: 14px; color: #111; min-width: 70px; text-align: center;
            background: #eee; border-radius: 4px; padding: 2px 8px; }}
-  #cs-fig  {{ width: 100%; max-width: 1000px; margin: 0 auto; }}
+  #cs-fig  {{ width: 100%; margin: 0 auto; }}
 </style>
 
 <div class="cs-fig-controls">
