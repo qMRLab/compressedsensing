@@ -4,6 +4,8 @@
 numpy
 scipy
 plotly
+nibabel
+PyWavelets
 jupyter
 nbformat
 pytest
