@@ -64,6 +64,57 @@ def compute_kspace_magnitude(brain):
 
 SAMPLING_MODES = ["random", "uniform"]
 DEFAULT_SAMPLING = "random"
+US_DIMS_OPTIONS = [1, 2]
+DEFAULT_US_DIMS = 2
+
+
+def _gen_pdf_1d(n_lines, p, pctg, radius=0.0):
+    """Generate a 1D variable-density sampling PDF.
+
+    Re-implemented from .external/sparseMRI_v0.2/utils/genPDF.m (Lustig 2007).
+    """
+    r = np.abs(np.linspace(-1, 1, n_lines))
+    idx = r < radius
+    target = int(np.floor(pctg * n_lines))
+
+    minval, maxval = 0.0, 1.0
+    for _ in range(100):
+        val = (minval + maxval) / 2.0
+        pdf = (1 - r) ** p + val
+        pdf = np.clip(pdf, 0, 1)
+        pdf[idx] = 1.0
+        n_samp = int(np.floor(np.sum(pdf)))
+        if n_samp > target:
+            maxval = val
+        elif n_samp < target:
+            minval = val
+        else:
+            break
+    return pdf
+
+
+def _gen_sampling_1d(pdf, n_iter=20, tol=2, seed=RNG_SEED):
+    """Generate a 1D sampling mask with minimum peak PSF sidelobe.
+
+    Re-implemented from .external/sparseMRI_v0.2/utils/genSampling.m (Lustig 2007).
+    """
+    target_k = np.sum(pdf)
+    best_mask = None
+    best_intr = np.inf
+    rng = np.random.default_rng(seed)
+
+    for _ in range(n_iter):
+        for _retry in range(1000):
+            mask = rng.random(len(pdf)) < pdf
+            if abs(mask.sum() - target_k) <= tol:
+                break
+        psf = np.fft.ifft(mask.astype(float) / np.where(pdf > 0, pdf, 1.0))
+        peak = np.max(np.abs(psf[1:]))
+        if peak < best_intr:
+            best_intr = peak
+            best_mask = mask.copy()
+
+    return best_mask
 
 
 def _gen_pdf_2d(im_shape, p, pctg, radius=0.0):
@@ -123,27 +174,43 @@ def _gen_sampling_2d(pdf, n_iter=10, tol=None, seed=RNG_SEED):
 
 
 def make_sampling_mask(im_shape, mode="random", R=R_FACTOR, center=CENTER_LINES,
-                       seed=RNG_SEED):
+                       seed=RNG_SEED, us_dims=2):
     """Return (mask2d, pdf2d) — 2D boolean mask and sampling PDF.
 
-    mode="random": 2D variable-density random undersampling with fully
-                   sampled centre (center×center square).
-                   Matches genPDF + genSampling from Lustig 2007.
-    mode="uniform": regular grid subsampling (every R-th point in each dim).
+    us_dims=2: undersample individual k-space points (2D).
+    us_dims=1: undersample phase-encode lines (columns) only (1D).
+    mode="random": variable-density PDF + Monte Carlo PSF optimisation.
+    mode="uniform": regular grid/line subsampling.
     """
     sy, sx = im_shape
-    if mode == "uniform":
-        mask = np.zeros(im_shape, dtype=bool)
-        mask[::R, ::R] = True
-        pdf = np.full(im_shape, 1.0 / (R * R))
-        pdf[mask] = 1.0
+    if us_dims == 1:
+        # 1D: undersample along columns (phase-encode = short axis)
+        if mode == "uniform":
+            mask1d = np.zeros(sx, dtype=bool)
+            mask1d[::R] = True
+            pdf1d = np.full(sx, 1.0 / R)
+            pdf1d[mask1d] = 1.0
+        else:
+            pctg = 1.0 / R
+            radius = center / sx
+            pdf1d = _gen_pdf_1d(sx, p=5, pctg=pctg, radius=radius)
+            mask1d = _gen_sampling_1d(pdf1d, n_iter=20, tol=2, seed=seed)
+        # Broadcast to 2D
+        mask2d = np.tile(mask1d[np.newaxis, :], (sy, 1))
+        pdf2d = np.tile(pdf1d[np.newaxis, :], (sy, 1))
     else:
-        pctg = 1.0 / R
-        # Radius: normalised so that a center×center square is fully sampled
-        radius = center / max(sy, sx)
-        pdf = _gen_pdf_2d(im_shape, p=5, pctg=pctg, radius=radius)
-        mask = _gen_sampling_2d(pdf, n_iter=10, tol=None, seed=seed)
-    return mask, pdf
+        # 2D: undersample individual points
+        if mode == "uniform":
+            mask2d = np.zeros(im_shape, dtype=bool)
+            mask2d[::R, ::R] = True
+            pdf2d = np.full(im_shape, 1.0 / (R * R))
+            pdf2d[mask2d] = 1.0
+        else:
+            pctg = 1.0 / R
+            radius = center / max(sy, sx)
+            pdf2d = _gen_pdf_2d(im_shape, p=5, pctg=pctg, radius=radius)
+            mask2d = _gen_sampling_2d(pdf2d, n_iter=10, tol=None, seed=seed)
+    return mask2d, pdf2d
 
 
 def make_sampling_overlay(mask2d):
@@ -703,44 +770,46 @@ def precompute(orientations=ORIENTATIONS):
         wavelet_map = compute_wavelet_map(brain)
         for samp_mode in SAMPLING_MODES:
             for R in R_VALUES:
-                key = f"{orient_name}_{samp_mode}_{R}"
-                mask2d, pdf2d = make_sampling_mask(brain.shape, mode=samp_mode, R=R)
-                overlay = make_sampling_overlay(mask2d)
-                us_kspace = undersampled_kspace(brain, mask2d)
-                us_kspace_mag = np.log10(np.abs(us_kspace) + 1)
-                recon = zero_filled_recon(brain, mask2d)
-                recon_wavelet_map = compute_wavelet_map(recon)
-                thresh_wavelet_map, thresh_recon = soft_threshold_wavelet(recon)
-                thresh_kspace_mag = compute_kspace_magnitude(thresh_recon)
-                unacquired_overlay = make_unacquired_overlay(mask2d)
-                combined_ks = data_consistency_kspace(brain, mask2d, thresh_recon)
-                combined_kspace_mag = np.log10(np.abs(combined_ks) + 1)
-                # 1 CG iteration for row 4 display
-                iter1_recon = cs_reconstruct(brain, mask2d, pdf2d, n_outer=1, Itnlim=1)
-                # Full reconstruction (5 outer × 8 CG = 40 iterations)
-                final_recon = cs_reconstruct(brain, mask2d, pdf2d)
-                fig = _build_fig(brain, kspace_mag, wavelet_map, overlay,
-                                 us_kspace_mag, recon, recon_wavelet_map,
-                                 thresh_wavelet_map, thresh_kspace_mag,
-                                 unacquired_overlay, combined_kspace_mag,
-                                 iter1_recon, final_recon)
-                is_default = (orient_name == DEFAULT_ORIENTATION
-                              and samp_mode == DEFAULT_SAMPLING
-                              and R == DEFAULT_R)
-                if is_default:
-                    ref = json.loads(fig.to_json())
-                    for trace in ref.get("data", []):
-                        if "z" in trace and isinstance(trace["z"], list):
-                            try:
-                                arr = np.array(trace["z"], dtype=float)
-                                trace["z"] = np.round(arr, 1).tolist()
-                            except (ValueError, TypeError):
-                                pass
-                    refs["default"] = ref
-                # Store row 1 once per orientation (same for all samp/R)
-                if orient_name not in orient_data:
-                    orient_data[orient_name] = _extract_orient_z(fig)
-                sampling_data[key] = _extract_sampling_z(fig)
+                for ud in US_DIMS_OPTIONS:
+                    key = f"{orient_name}_{samp_mode}_{R}_{ud}"
+                    mask2d, pdf2d = make_sampling_mask(brain.shape, mode=samp_mode, R=R, us_dims=ud)
+                    overlay = make_sampling_overlay(mask2d)
+                    us_kspace = undersampled_kspace(brain, mask2d)
+                    us_kspace_mag = np.log10(np.abs(us_kspace) + 1)
+                    recon = zero_filled_recon(brain, mask2d)
+                    recon_wavelet_map = compute_wavelet_map(recon)
+                    thresh_wavelet_map, thresh_recon = soft_threshold_wavelet(recon)
+                    thresh_kspace_mag = compute_kspace_magnitude(thresh_recon)
+                    unacquired_overlay = make_unacquired_overlay(mask2d)
+                    combined_ks = data_consistency_kspace(brain, mask2d, thresh_recon)
+                    combined_kspace_mag = np.log10(np.abs(combined_ks) + 1)
+                    # 1 CG iteration for row 4 display
+                    iter1_recon = cs_reconstruct(brain, mask2d, pdf2d, n_outer=1, Itnlim=1)
+                    # Full reconstruction (5 outer × 8 CG = 40 iterations)
+                    final_recon = cs_reconstruct(brain, mask2d, pdf2d)
+                    fig = _build_fig(brain, kspace_mag, wavelet_map, overlay,
+                                     us_kspace_mag, recon, recon_wavelet_map,
+                                     thresh_wavelet_map, thresh_kspace_mag,
+                                     unacquired_overlay, combined_kspace_mag,
+                                     iter1_recon, final_recon)
+                    is_default = (orient_name == DEFAULT_ORIENTATION
+                                  and samp_mode == DEFAULT_SAMPLING
+                                  and R == DEFAULT_R
+                                  and ud == DEFAULT_US_DIMS)
+                    if is_default:
+                        ref = json.loads(fig.to_json())
+                        for trace in ref.get("data", []):
+                            if "z" in trace and isinstance(trace["z"], list):
+                                try:
+                                    arr = np.array(trace["z"], dtype=float)
+                                    trace["z"] = np.round(arr, 1).tolist()
+                                except (ValueError, TypeError):
+                                    pass
+                        refs["default"] = ref
+                    # Store row 1 once per orientation (same for all samp/R/ud)
+                    if orient_name not in orient_data:
+                        orient_data[orient_name] = _extract_orient_z(fig)
+                    sampling_data[key] = _extract_sampling_z(fig)
     return refs, orient_data, sampling_data
 
 
@@ -778,6 +847,12 @@ def make_embeddable_html(orientations=ORIENTATIONS):
       {"".join(f'<option value="{r}"{" selected" if r == DEFAULT_R else ""}>{r}x</option>' for r in R_VALUES)}
     </select>
   </div>
+  <div class="cs2d-fig-ctrl-group">
+    <label>Undersampling dims</label>
+    <select id="cs2d-udSelect">
+      {"".join(f'<option value="{d}"{" selected" if d == DEFAULT_US_DIMS else ""}>{d}D</option>' for d in US_DIMS_OPTIONS)}
+    </select>
+  </div>
 </div>
 
 <div id="cs2d-fig"></div>
@@ -801,6 +876,7 @@ def make_embeddable_html(orientations=ORIENTATIONS):
       var orient = document.getElementById("cs2d-orientSelect").value;
       var samp   = document.getElementById("cs2d-samplingSelect").value;
       var rval   = document.getElementById("cs2d-rSelect").value;
+      var udval  = document.getElementById("cs2d-udSelect").value;
       // Update row 1 from orientation-only data
       var od = ORIENT_DATA[orient];
       if (od) {{
@@ -810,7 +886,7 @@ def make_embeddable_html(orientations=ORIENTATIONS):
         }}
       }}
       // Update rows 2-4 from sampling data
-      var key = orient + "_" + samp + "_" + rval;
+      var key = orient + "_" + samp + "_" + rval + "_" + udval;
       var sd = SAMP_DATA[key];
       if (sd) {{
         var si = Object.keys(sd);
@@ -822,6 +898,7 @@ def make_embeddable_html(orientations=ORIENTATIONS):
     document.getElementById("cs2d-orientSelect").addEventListener("change", updateFig);
     document.getElementById("cs2d-samplingSelect").addEventListener("change", updateFig);
     document.getElementById("cs2d-rSelect").addEventListener("change", updateFig);
+    document.getElementById("cs2d-udSelect").addEventListener("change", updateFig);
   }}
 
   if (typeof Plotly !== "undefined") {{
