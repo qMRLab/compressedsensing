@@ -30,7 +30,7 @@ WAVELET_LEVEL = 3
 R_FACTOR = 2
 R_VALUES = [2, 3]
 DEFAULT_R = 2
-CENTER_LINES = 10
+CENTER_LINES = 24
 RNG_SEED = 42
 
 
@@ -66,67 +66,111 @@ SAMPLING_MODES = ["random", "uniform"]
 DEFAULT_SAMPLING = "random"
 
 
-def make_sampling_mask(n_lines, mode="random", R=R_FACTOR, center=CENTER_LINES,
-                       seed=RNG_SEED):
-    """Return a boolean mask of which phase-encode lines are sampled.
+def _gen_pdf_2d(im_shape, p, pctg, radius=0.0):
+    """Generate a 2D variable-density sampling PDF.
 
-    mode="random": fully sample the central `center` lines, then sample
-                   the rest with a Poisson-like variable-density distribution
-                   (probability ∝ 1/distance from centre) to reach n_lines/R.
-    mode="uniform": sample every R-th line (no special centre treatment).
+    Re-implemented from .external/sparseMRI_v0.2/utils/genPDF.m (Lustig 2007).
+    pdf = (1-r)^p + val, clamped to [0,1], where r is L2 distance from centre
+    normalised to [0,1], and val is found by bisection to hit target count.
     """
-    mask = np.zeros(n_lines, dtype=bool)
+    sy, sx = im_shape
+    y, x = np.meshgrid(np.linspace(-1, 1, sx), np.linspace(-1, 1, sy))
+    r = np.sqrt(x ** 2 + y ** 2)
+    r = r / np.max(np.abs(r))
+    idx = r < radius
+    target = int(np.floor(pctg * sy * sx))
+
+    minval, maxval = 0.0, 1.0
+    for _ in range(100):
+        val = (minval + maxval) / 2.0
+        pdf = (1 - r) ** p + val
+        pdf = np.clip(pdf, 0, 1)
+        pdf[idx] = 1.0
+        n_samp = int(np.floor(np.sum(pdf)))
+        if n_samp > target:
+            maxval = val
+        elif n_samp < target:
+            minval = val
+        else:
+            break
+    return pdf
+
+
+def _gen_sampling_2d(pdf, n_iter=10, tol=None, seed=RNG_SEED):
+    """Generate a 2D sampling mask with minimum peak PSF sidelobe.
+
+    Re-implemented from .external/sparseMRI_v0.2/utils/genSampling.m (Lustig 2007).
+    """
+    if tol is None:
+        tol = max(10, int(np.sum(pdf) * 0.02))
+    target_k = np.sum(pdf)
+    best_mask = None
+    best_intr = np.inf
+    rng = np.random.default_rng(seed)
+
+    for _ in range(n_iter):
+        for _retry in range(1000):
+            mask = rng.random(pdf.shape) < pdf
+            if abs(mask.sum() - target_k) <= tol:
+                break
+        psf = np.fft.ifft2(mask.astype(float) / np.where(pdf > 0, pdf, 1.0))
+        peak = np.max(np.abs(psf.ravel()[1:]))
+        if peak < best_intr:
+            best_intr = peak
+            best_mask = mask.copy()
+
+    return best_mask
+
+
+def make_sampling_mask(im_shape, mode="random", R=R_FACTOR, center=CENTER_LINES,
+                       seed=RNG_SEED):
+    """Return (mask2d, pdf2d) — 2D boolean mask and sampling PDF.
+
+    mode="random": 2D variable-density random undersampling with fully
+                   sampled centre (center×center square).
+                   Matches genPDF + genSampling from Lustig 2007.
+    mode="uniform": regular grid subsampling (every R-th point in each dim).
+    """
+    sy, sx = im_shape
     if mode == "uniform":
-        mask[::R] = True
+        mask = np.zeros(im_shape, dtype=bool)
+        mask[::R, ::R] = True
+        pdf = np.full(im_shape, 1.0 / (R * R))
+        pdf[mask] = 1.0
     else:
-        # Fully sample the centre
-        c0 = n_lines // 2 - center // 2
-        mask[c0:c0 + center] = True
-        # Variable-density random sampling for the rest
-        outer_indices = np.where(~mask)[0]
-        n_total = n_lines // R
-        n_extra = max(n_total - center, 0)
-        # Probability ∝ 1 / distance from centre (Poisson-like density)
-        mid = n_lines / 2.0
-        distances = np.abs(outer_indices - mid)
-        prob = 1.0 / (distances + 1.0)
-        prob /= prob.sum()
-        rng = np.random.default_rng(seed)
-        chosen = rng.choice(outer_indices, size=min(n_extra, len(outer_indices)),
-                            replace=False, p=prob)
-        mask[chosen] = True
-    return mask
+        pctg = 1.0 / R
+        # Radius: normalised so that a center×center square is fully sampled
+        radius = center / max(sy, sx)
+        pdf = _gen_pdf_2d(im_shape, p=5, pctg=pctg, radius=radius)
+        mask = _gen_sampling_2d(pdf, n_iter=10, tol=None, seed=seed)
+    return mask, pdf
 
 
-def make_sampling_overlay(n_rows, n_cols, mask):
+def make_sampling_overlay(mask2d):
     """Build a 2D array for the red sampling overlay.
 
-    Sampled columns (phase-encode lines) → 1.0, unsampled → NaN (transparent).
+    Sampled points → 1.0, unsampled → NaN (transparent).
     """
-    overlay = np.full((n_rows, n_cols), np.nan)
-    overlay[:, mask] = 1.0
+    overlay = np.full(mask2d.shape, np.nan)
+    overlay[mask2d] = 1.0
     return overlay
 
 
-def undersampled_kspace(brain, mask):
+def undersampled_kspace(brain, mask2d):
     """Return the zero-filled undersampled k-space (shifted, complex).
 
-    Mask is along columns (phase-encode direction).
+    mask2d is a 2D boolean array matching the shifted k-space shape.
     """
     kspace = np.fft.fft2(brain)
     kspace_shifted = np.fft.fftshift(kspace)
     undersampled = np.zeros_like(kspace_shifted)
-    undersampled[:, mask] = kspace_shifted[:, mask]
+    undersampled[mask2d] = kspace_shifted[mask2d]
     return undersampled
 
 
-def zero_filled_recon(brain, mask):
-    """Reconstruct image from undersampled k-space via zero-filling.
-
-    The mask is applied to columns (phase-encode direction) of the
-    fftshifted k-space.
-    """
-    us = undersampled_kspace(brain, mask)
+def zero_filled_recon(brain, mask2d):
+    """Reconstruct image from undersampled k-space via zero-filling."""
+    us = undersampled_kspace(brain, mask2d)
     recon = np.fft.ifft2(np.fft.ifftshift(us))
     return np.abs(recon)
 
@@ -344,20 +388,18 @@ def fnlCg(x0, mask2d, data, wavelet=WAVELET, level=WAVELET_LEVEL, **kwargs):
     return x
 
 
-def cs_reconstruct(brain, mask, n_outer=5, wavelet=WAVELET, level=WAVELET_LEVEL,
-                   **kwargs):
+def cs_reconstruct(brain, mask2d, pdf2d, n_outer=5, wavelet=WAVELET,
+                   level=WAVELET_LEVEL, **kwargs):
     """Full CS reconstruction matching demo_Brain_2D.m workflow.
 
     Runs n_outer calls to fnlCg (each doing Itnlim=8 CG iterations).
+    Density compensation: data .* mask ./ pdf (as in demo_Brain_2D.m).
     """
-    mask2d = np.zeros(brain.shape, dtype=bool)
-    mask2d[:, mask] = True  # broadcast 1D column mask to 2D
-
-    # Measured data (undersampled k-space)
-    data = _fft2c(brain) * mask2d
+    # Measured data with density compensation: data .* mask ./ pdf
+    data = _fft2c(brain) * mask2d / np.where(pdf2d > 0, pdf2d, 1.0)
 
     # Zero-filled DC image as starting point
-    im_dc = _ifft2c(data)
+    im_dc = _ifft2c(data * mask2d)
     # Normalise
     scale = np.max(np.abs(im_dc))
     if scale > 0:
@@ -371,27 +413,27 @@ def cs_reconstruct(brain, mask, n_outer=5, wavelet=WAVELET, level=WAVELET_LEVEL,
     return np.abs(x) * scale
 
 
-def data_consistency_kspace(brain, mask, thresh_recon):
-    """Combine original acquired k-space lines with thresholded recon's k-space.
+def data_consistency_kspace(brain, mask2d, thresh_recon):
+    """Combine original acquired k-space with thresholded recon's k-space.
 
-    Acquired lines (mask=True): use original k-space data.
-    Unacquired lines (mask=False): use k-space from the thresholded reconstruction.
+    Acquired points (mask2d=True): use original k-space data.
+    Unacquired points: use k-space from the thresholded reconstruction.
     Returns the combined shifted k-space (complex).
     """
     orig_kspace = np.fft.fftshift(np.fft.fft2(brain))
     thresh_kspace = np.fft.fftshift(np.fft.fft2(thresh_recon))
     combined = thresh_kspace.copy()
-    combined[:, mask] = orig_kspace[:, mask]
+    combined[mask2d] = orig_kspace[mask2d]
     return combined
 
 
-def make_unacquired_overlay(n_rows, n_cols, mask):
-    """Build a 2D array highlighting UNacquired columns (green overlay).
+def make_unacquired_overlay(mask2d):
+    """Build a 2D array highlighting UNacquired points (green overlay).
 
-    Unsampled columns → 1.0, sampled columns → NaN (transparent).
+    Unsampled → 1.0, sampled → NaN (transparent).
     """
-    overlay = np.full((n_rows, n_cols), np.nan)
-    overlay[:, ~mask] = 1.0
+    overlay = np.full(mask2d.shape, np.nan)
+    overlay[~mask2d] = 1.0
     return overlay
 
 
@@ -662,22 +704,21 @@ def precompute(orientations=ORIENTATIONS):
         for samp_mode in SAMPLING_MODES:
             for R in R_VALUES:
                 key = f"{orient_name}_{samp_mode}_{R}"
-                mask = make_sampling_mask(brain.shape[1], mode=samp_mode, R=R)
-                overlay = make_sampling_overlay(brain.shape[0], brain.shape[1], mask)
-                us_kspace = undersampled_kspace(brain, mask)
+                mask2d, pdf2d = make_sampling_mask(brain.shape, mode=samp_mode, R=R)
+                overlay = make_sampling_overlay(mask2d)
+                us_kspace = undersampled_kspace(brain, mask2d)
                 us_kspace_mag = np.log10(np.abs(us_kspace) + 1)
-                recon = zero_filled_recon(brain, mask)
+                recon = zero_filled_recon(brain, mask2d)
                 recon_wavelet_map = compute_wavelet_map(recon)
                 thresh_wavelet_map, thresh_recon = soft_threshold_wavelet(recon)
                 thresh_kspace_mag = compute_kspace_magnitude(thresh_recon)
-                unacquired_overlay = make_unacquired_overlay(
-                    brain.shape[0], brain.shape[1], mask)
-                combined_ks = data_consistency_kspace(brain, mask, thresh_recon)
+                unacquired_overlay = make_unacquired_overlay(mask2d)
+                combined_ks = data_consistency_kspace(brain, mask2d, thresh_recon)
                 combined_kspace_mag = np.log10(np.abs(combined_ks) + 1)
                 # 1 CG iteration for row 4 display
-                iter1_recon = cs_reconstruct(brain, mask, n_outer=1, Itnlim=1)
+                iter1_recon = cs_reconstruct(brain, mask2d, pdf2d, n_outer=1, Itnlim=1)
                 # Full reconstruction (5 outer × 8 CG = 40 iterations)
-                final_recon = cs_reconstruct(brain, mask)
+                final_recon = cs_reconstruct(brain, mask2d, pdf2d)
                 fig = _build_fig(brain, kspace_mag, wavelet_map, overlay,
                                  us_kspace_mag, recon, recon_wavelet_map,
                                  thresh_wavelet_map, thresh_kspace_mag,
