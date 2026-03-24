@@ -21,8 +21,6 @@ except ImportError:
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 ORIENTATIONS = {
     "sagittal": DATA_DIR / "brain_sagittal_slice.nii.gz",
-    "coronal":  DATA_DIR / "brain_coronal_slice.nii.gz",
-    "axial":    DATA_DIR / "brain_axial_slice.nii.gz",
 }
 DEFAULT_ORIENTATION = "sagittal"
 WAVELET = "db4"
@@ -30,6 +28,8 @@ WAVELET_LEVEL = 3
 R_FACTOR = 2
 R_VALUES = [2, 3]
 DEFAULT_R = 2
+# Map R to approximate % sampled (rounded to nearest 5)
+R_TO_PCT = {2: 50, 3: 35}
 CENTER_LINES = 24
 RNG_SEED = 42
 
@@ -717,6 +717,83 @@ def _build_fig(brain, kspace_mag, wavelet_map, sampling_overlay,
             fig.update_xaxes(visible=False, row=row, col=col)
             fig.update_yaxes(visible=False, row=row, col=col)
 
+    # ── Double-sided arrows between row 1 subplots ────────────────────────
+    # ax/ay are pixel offsets from arrowhead (positive ax = tail to the left)
+    row1_y = 0.92
+    arrow_gap = 40  # pixels between tail and head
+
+    arrow_ab_left = 0.305
+    arrow_ab_right = 0.35
+    arrow_bc_left = 0.655
+    arrow_bc_right = 0.70
+
+    arrow_style = dict(
+        showarrow=True,
+        arrowsize=1.5,
+        arrowwidth=2,
+        arrowcolor="#333",
+        arrowhead=2,
+        xref="paper", yref="paper",
+    )
+
+    # a → b (arrow pointing right, tail to the left)
+    fig.add_annotation(
+        x=arrow_ab_right, y=row1_y + 0.006,
+        ax=-arrow_gap, ay=0,
+        text="", **arrow_style,
+    )
+    # b → a (arrow pointing left, tail to the right)
+    fig.add_annotation(
+        x=arrow_ab_left, y=row1_y - 0.006,
+        ax=arrow_gap, ay=0,
+        text="", **arrow_style,
+    )
+    # Label between a↔b
+    fig.add_annotation(
+        x=(arrow_ab_left + arrow_ab_right) / 2, y=row1_y + 0.03,
+        text="FFT", showarrow=False,
+        font=dict(size=20, color="#333"),
+        xref="paper", yref="paper",
+    )
+
+    # b → c (arrow pointing right)
+    fig.add_annotation(
+        x=arrow_bc_right, y=row1_y + 0.006,
+        ax=-arrow_gap, ay=0,
+        text="", **arrow_style,
+    )
+    # c → b (arrow pointing left)
+    fig.add_annotation(
+        x=arrow_bc_left, y=row1_y - 0.006,
+        ax=arrow_gap, ay=0,
+        text="", **arrow_style,
+    )
+    # Label between b↔c
+    fig.add_annotation(
+        x=(arrow_bc_left + arrow_bc_right) / 2, y=row1_y + 0.03,
+        text="Ψ", showarrow=False,
+        font=dict(size=20, color="#333"),
+        xref="paper", yref="paper",
+    )
+
+    # ── Vertical arrow: a → d (Undersampling) ────────────────────────────
+    col1_x = 0.157  # center of col 1 in paper space
+    row1_bottom = 0.85
+    row2_top = 0.81
+    fig.add_annotation(
+        x=col1_x, y=row2_top,
+        ax=0, ay=-arrow_gap,
+        text="", **arrow_style,
+    )
+    # Label to the left of the arrow
+    fig.add_annotation(
+        x=col1_x + 0.005, y=(row1_bottom + row2_top) / 2,
+        text="Undersampling", showarrow=False,
+        font=dict(size=20, color="#333"),
+        xref="paper", yref="paper",
+        textangle=0,
+    )
+
     return fig
 
 
@@ -830,21 +907,15 @@ def make_embeddable_html(orientations=ORIENTATIONS):
 
 <div class="cs2d-fig-controls">
   <div class="cs2d-fig-ctrl-group">
-    <label>Orientation</label>
-    <select id="cs2d-orientSelect">
-      {"".join(f'<option value="{n}"{" selected" if n == DEFAULT_ORIENTATION else ""}>{n.capitalize()}</option>' for n in orientation_names)}
-    </select>
-  </div>
-  <div class="cs2d-fig-ctrl-group">
     <label>Sampling</label>
     <select id="cs2d-samplingSelect">
       {"".join(f'<option value="{m}"{" selected" if m == DEFAULT_SAMPLING else ""}>{m.capitalize()}</option>' for m in SAMPLING_MODES)}
     </select>
   </div>
   <div class="cs2d-fig-ctrl-group">
-    <label>R (acceleration)</label>
+    <label>% k-space sampled</label>
     <select id="cs2d-rSelect">
-      {"".join(f'<option value="{r}"{" selected" if r == DEFAULT_R else ""}>{r}x</option>' for r in R_VALUES)}
+      {"".join(f'<option value="{r}"{" selected" if r == DEFAULT_R else ""}>{R_TO_PCT[r]}%</option>' for r in R_VALUES)}
     </select>
   </div>
   <div class="cs2d-fig-ctrl-group">
@@ -867,25 +938,51 @@ def make_embeddable_html(orientations=ORIENTATIONS):
     Plotly.newPlot("cs2d-fig", REF.data, REF.layout, {{responsive: true}});
 
     var figEl = document.getElementById("cs2d-fig");
-    if (window.ResizeObserver) {{
-      new ResizeObserver(function() {{ Plotly.Plots.resize(figEl); }}).observe(figEl);
+
+    // Scale arrows and labels to plot width
+    // Arrow annotations are indices 15-20 in layout.annotations
+    // 15: a→b, 16: b→a, 17: FFT label, 18: b→c, 19: c→b, 20: Ψ label
+    function scaleArrows() {{
+      var plotWidth = figEl.offsetWidth || 800;
+      var gap = Math.max(12, plotWidth * 0.035);
+      var fontSize = Math.max(10, Math.min(18, plotWidth * 0.016));
+      var anns = figEl.layout.annotations;
+      if (!anns || anns.length < 21) return;
+      // a→b (index 15): tail left of head
+      anns[15].ax = -gap;
+      // b→a (index 16): tail right of head
+      anns[16].ax = gap;
+      // FFT label (index 17)
+      anns[17].font.size = fontSize;
+      // b→c (index 18): tail left of head
+      anns[18].ax = -gap;
+      // c→b (index 19): tail right of head
+      anns[19].ax = gap;
+      // Ψ label (index 20)
+      anns[20].font.size = fontSize;
+      Plotly.relayout("cs2d-fig", {{ annotations: anns }});
     }}
-    window.addEventListener("resize", function() {{ Plotly.Plots.resize(figEl); }});
+
+    if (window.ResizeObserver) {{
+      new ResizeObserver(function() {{
+        Plotly.Plots.resize(figEl);
+        scaleArrows();
+      }}).observe(figEl);
+    }}
+    window.addEventListener("resize", function() {{
+      Plotly.Plots.resize(figEl);
+      scaleArrows();
+    }});
+
+    // Initial scale
+    setTimeout(scaleArrows, 100);
 
     function updateFig() {{
-      var orient = document.getElementById("cs2d-orientSelect").value;
+      var orient = "{DEFAULT_ORIENTATION}";
       var samp   = document.getElementById("cs2d-samplingSelect").value;
       var rval   = document.getElementById("cs2d-rSelect").value;
       var udval  = document.getElementById("cs2d-udSelect").value;
-      // Update row 1 from orientation-only data
-      var od = ORIENT_DATA[orient];
-      if (od) {{
-        var oi = Object.keys(od);
-        for (var k = 0; k < oi.length; k++) {{
-          Plotly.restyle("cs2d-fig", {{ z: [od[oi[k]]] }}, [parseInt(oi[k])]);
-        }}
-      }}
-      // Update rows 2-4 from sampling data
+      // Update rows 2-5 from sampling data
       var key = orient + "_" + samp + "_" + rval + "_" + udval;
       var sd = SAMP_DATA[key];
       if (sd) {{
@@ -895,7 +992,6 @@ def make_embeddable_html(orientations=ORIENTATIONS):
         }}
       }}
     }}
-    document.getElementById("cs2d-orientSelect").addEventListener("change", updateFig);
     document.getElementById("cs2d-samplingSelect").addEventListener("change", updateFig);
     document.getElementById("cs2d-rSelect").addEventListener("change", updateFig);
     document.getElementById("cs2d-udSelect").addEventListener("change", updateFig);

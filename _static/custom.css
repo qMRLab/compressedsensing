@@ -54,6 +54,11 @@ article.article > * {
   grid-column: page !important;
 }
 
+/* Ensure article content clears the left sidebar */
+article.article {
+  padding-left: 240px !important;
+}
+
 /* Notebook output blocks with figures: go full screen width */
 article.article > .myst-jp-nb-block [data-name="outputs-container"] {
   max-width: none !important;

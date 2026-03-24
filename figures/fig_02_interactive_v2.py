@@ -28,6 +28,7 @@ except ModuleNotFoundError:
 DEFAULT_POSITIONS = [10, 50, 100]
 DEFAULT_HEIGHTS   = [1.0, 0.85, 0.40]
 R_VALUES     = [2, 3, 4]
+R_TO_PCT     = {2: 50, 3: 35, 4: 25}
 SIGMA_VALUES = [2.0, 3.0, 4.0]
 SIGMA2       = 3.0
 N            = 128
@@ -391,9 +392,9 @@ def _render_embeddable_html(refs, combos, r_values, sigma_values):
     </select>
   </div>
   <div class="cs-fig-ctrl-group">
-    <label>Acceleration R</label>
+    <label>% k-space sampled</label>
     <select id="cs-rSelect">
-      {"".join(f'<option value="{R}"{" selected" if R == R_DEFAULT else ""}>{R}×</option>' for R in r_values)}
+      {"".join(f'<option value="{R}"{" selected" if R == R_DEFAULT else ""}>{R_TO_PCT[R]}%</option>' for R in r_values)}
     </select>
   </div>
   <div class="cs-fig-ctrl-group">
