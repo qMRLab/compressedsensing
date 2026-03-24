@@ -1030,6 +1030,98 @@ def make_embeddable_html(orientations=ORIENTATIONS):
     // Initial scale
     setTimeout(scaleArrows, 100);
 
+    // ── SVG curved arrow: k → l (sideways U curving right) ──────────
+    function drawCurvedArrow() {{
+      var gd = figEl;
+      var layout = gd._fullLayout;
+      if (!layout) return;
+
+      // Paper-space coords for k (row4 col2 bottom-center) and l (row5 col2 top-center)
+      var k_px = 0.70;   // col 2 center
+      var k_py = 0.265;  // bottom of row 4
+      var l_px = 0.70;   // col 2 center
+      var l_py = 0.15;   // top of row 5
+
+      // Convert paper coords to pixel coords
+      var plotArea = layout._size;
+      var x_k = plotArea.l + k_px * plotArea.w;
+      var y_k = plotArea.t + (1 - k_py) * plotArea.h;
+      var x_l = plotArea.l + l_px * plotArea.w;
+      var y_l = plotArea.t + (1 - l_py) * plotArea.h;
+
+      // Control point: curve to the right
+      var bulge = plotArea.w * 0.12;
+      var cx = Math.max(x_k, x_l) + bulge;
+      var cy = (y_k + y_l) / 2;
+
+      // Find or create the SVG overlay group
+      var svg = gd.querySelector("svg.main-svg");
+      if (!svg) return;
+      var existingG = svg.querySelector("#curved-arrow-kl");
+      if (existingG) existingG.remove();
+
+      var ns = "http://www.w3.org/2000/svg";
+      var g = document.createElementNS(ns, "g");
+      g.setAttribute("id", "curved-arrow-kl");
+
+      // Arrowhead marker
+      var defs = svg.querySelector("defs");
+      if (!defs) {{
+        defs = document.createElementNS(ns, "defs");
+        svg.insertBefore(defs, svg.firstChild);
+      }}
+      var existingMarker = defs.querySelector("#arrowhead-kl");
+      if (existingMarker) existingMarker.remove();
+
+      var marker = document.createElementNS(ns, "marker");
+      marker.setAttribute("id", "arrowhead-kl");
+      marker.setAttribute("markerWidth", "10");
+      marker.setAttribute("markerHeight", "7");
+      marker.setAttribute("refX", "9");
+      marker.setAttribute("refY", "3.5");
+      marker.setAttribute("orient", "auto");
+      var polygon = document.createElementNS(ns, "polygon");
+      polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+      polygon.setAttribute("fill", "#333");
+      marker.appendChild(polygon);
+      defs.appendChild(marker);
+
+      // Curved path
+      var path = document.createElementNS(ns, "path");
+      path.setAttribute("d",
+        "M " + x_k + " " + y_k +
+        " Q " + cx + " " + cy + " " + x_l + " " + y_l
+      );
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "#333");
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("marker-end", "url(#arrowhead-kl)");
+      g.appendChild(path);
+
+      // Label "Iterate" at the control point
+      var label = document.createElementNS(ns, "text");
+      label.setAttribute("x", cx + 1);
+      label.setAttribute("y", cy);
+      label.setAttribute("fill", "#333");
+      label.setAttribute("font-size", "28");
+      label.setAttribute("font-family", "sans-serif");
+      label.setAttribute("dominant-baseline", "middle");
+      label.textContent = "Iterate";
+      g.appendChild(label);
+
+      svg.appendChild(g);
+    }}
+
+    // Draw after initial render, and redraw on resize
+    setTimeout(drawCurvedArrow, 200);
+    if (window.ResizeObserver) {{
+      new ResizeObserver(drawCurvedArrow).observe(figEl);
+    }}
+    window.addEventListener("resize", drawCurvedArrow);
+    // Redraw after any restyle (dropdown change)
+    figEl.on("plotly_restyle", function() {{ setTimeout(drawCurvedArrow, 50); }});
+    figEl.on("plotly_relayout", function() {{ setTimeout(drawCurvedArrow, 50); }});
+
     function updateFig() {{
       var orient = "{DEFAULT_ORIENTATION}";
       var samp   = document.getElementById("cs2d-samplingSelect").value;
