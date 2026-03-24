@@ -799,6 +799,13 @@ def _build_fig(brain, kspace_mag, wavelet_map, sampling_overlay,
         text="", **arrow_style,
     )
 
+    # j->k (arrow pointing right)
+    fig.add_annotation(
+        x=arrow_ab_right, y=row1_y - 0.006 - 0.62,
+        ax=-arrow_gap, ay=0,
+        text="", **arrow_style,
+    )
+
     # ── Vertical arrow: a → d (Undersampling) ────────────────────────────
     col1_x = 0.157  # center of col 1 in paper space
     col3_x = 0.843  # center of col 3 in paper space
