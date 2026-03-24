@@ -720,12 +720,14 @@ def _build_fig(brain, kspace_mag, wavelet_map, sampling_overlay,
     # ── Double-sided arrows between row 1 subplots ────────────────────────
     # ax/ay are pixel offsets from arrowhead (positive ax = tail to the left)
     row1_y = 0.92
+    row2_y = 0.70
+
     arrow_gap = 40  # pixels between tail and head
 
-    arrow_ab_left = 0.305
-    arrow_ab_right = 0.35
+    arrow_ab_left = 0.310
+    arrow_ab_right = 0.345
     arrow_bc_left = 0.655
-    arrow_bc_right = 0.70
+    arrow_bc_right = 0.690
 
     arrow_style = dict(
         showarrow=True,
@@ -750,7 +752,7 @@ def _build_fig(brain, kspace_mag, wavelet_map, sampling_overlay,
     )
     # Label between a↔b
     fig.add_annotation(
-        x=(arrow_ab_left + arrow_ab_right) / 2, y=row1_y + 0.03,
+        x=arrow_ab_left, y=row1_y + 0.03,
         text="FFT", showarrow=False,
         font=dict(size=20, color="#333"),
         xref="paper", yref="paper",
@@ -770,16 +772,46 @@ def _build_fig(brain, kspace_mag, wavelet_map, sampling_overlay,
     )
     # Label between b↔c
     fig.add_annotation(
-        x=(arrow_bc_left + arrow_bc_right) / 2, y=row1_y + 0.03,
+        x=arrow_bc_left+0.0250, y=row1_y + 0.03,
         text="Ψ", showarrow=False,
         font=dict(size=20, color="#333"),
         xref="paper", yref="paper",
     )
 
+    # d → e (arrow pointing right, tail to the left)
+    fig.add_annotation(
+        x=arrow_ab_right, y=row2_y + 0.006,
+        ax=-arrow_gap, ay=0,
+        text="", **arrow_style,
+    )
+
+    # e → f (arrow pointing right)
+    fig.add_annotation(
+        x=arrow_bc_right, y=row2_y + 0.006,
+        ax=-arrow_gap, ay=0,
+        text="", **arrow_style,
+    )
+
+    # g <- i (arrow pointing left)
+    fig.add_annotation(
+        x=arrow_bc_left-0.26, y=row1_y - 0.006 - 0.41,
+        ax=arrow_gap*8, ay=0,
+        text="", **arrow_style,
+    )
+
     # ── Vertical arrow: a → d (Undersampling) ────────────────────────────
     col1_x = 0.157  # center of col 1 in paper space
+    col3_x = 0.843  # center of col 3 in paper space
+
     row1_bottom = 0.85
     row2_top = 0.81
+    
+    row3_middle = 0.60
+
+    row4_middle = 0.39
+
+
+    # a → d
     fig.add_annotation(
         x=col1_x, y=row2_top,
         ax=0, ay=-arrow_gap,
@@ -792,6 +824,20 @@ def _build_fig(brain, kspace_mag, wavelet_map, sampling_overlay,
         font=dict(size=20, color="#333"),
         xref="paper", yref="paper",
         textangle=0,
+    )
+
+    # f → i
+    fig.add_annotation(
+        x=col3_x, y=row3_middle,
+        ax=0, ay=-arrow_gap,
+        text="", **arrow_style,
+    )
+
+    # f → i
+    fig.add_annotation(
+        x=col1_x, y=row4_middle,
+        ax=0, ay=-arrow_gap,
+        text="", **arrow_style,
     )
 
     return fig
