@@ -1112,15 +1112,84 @@ def make_embeddable_html(orientations=ORIENTATIONS):
       svg.appendChild(g);
     }}
 
-    // Draw after initial render, and redraw on resize
-    setTimeout(drawCurvedArrow, 200);
-    if (window.ResizeObserver) {{
-      new ResizeObserver(drawCurvedArrow).observe(figEl);
+    // ── SVG L-shaped arrow: left of d → down → right to between g and j ──
+    function drawLArrow() {{
+      var gd = figEl;
+      var layout = gd._fullLayout;
+      if (!layout) return;
+      var plotArea = layout._size;
+
+      // Paper-space coords (finetune these)
+      var start_px = 0.015;   // x: left edge of d (col1 center-ish)
+      var start_py = 0.706;   // y: middle of row 2
+      var left_px  = -0.015;   // x: how far left the vertical segment goes
+      var mid_py   = 0.403;   // y: midpoint between row 3 and row 4
+      var end_px   = 0.156;   // x: center between g and j (col1 center)
+
+      // Convert to pixels
+      var x_start = plotArea.l + start_px * plotArea.w;
+      var y_start = plotArea.t + (1 - start_py) * plotArea.h;
+      var x_left  = plotArea.l + left_px * plotArea.w;
+      var y_mid   = plotArea.t + (1 - mid_py) * plotArea.h;
+      var x_end   = plotArea.l + end_px * plotArea.w;
+      var y_end   = y_mid;
+
+      var svg = gd.querySelector("svg.main-svg");
+      if (!svg) return;
+      var existingG = svg.querySelector("#l-arrow-dgj");
+      if (existingG) existingG.remove();
+
+      var ns = "http://www.w3.org/2000/svg";
+      var g = document.createElementNS(ns, "g");
+      g.setAttribute("id", "l-arrow-dgj");
+
+      // Arrowhead marker
+      var defs = svg.querySelector("defs");
+      if (!defs) {{
+        defs = document.createElementNS(ns, "defs");
+        svg.insertBefore(defs, svg.firstChild);
+      }}
+      var existingMarker = defs.querySelector("#arrowhead-lgj");
+      if (existingMarker) existingMarker.remove();
+
+      var marker = document.createElementNS(ns, "marker");
+      marker.setAttribute("id", "arrowhead-lgj");
+      marker.setAttribute("markerWidth", "10");
+      marker.setAttribute("markerHeight", "7");
+      marker.setAttribute("refX", "9");
+      marker.setAttribute("refY", "3.5");
+      marker.setAttribute("orient", "auto");
+      var polygon = document.createElementNS(ns, "polygon");
+      polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+      polygon.setAttribute("fill", "#333");
+      marker.appendChild(polygon);
+      defs.appendChild(marker);
+
+      // L-shaped polyline: right-to-left, then down, then left-to-right
+      var path = document.createElementNS(ns, "path");
+      path.setAttribute("d",
+        "M " + x_start + " " + y_start +
+        " L " + x_left + " " + y_start +
+        " L " + x_left + " " + y_end +
+        " L " + x_end + " " + y_end
+      );
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "#333");
+      path.setAttribute("stroke-width", "2");
+      g.appendChild(path);
+
+      svg.appendChild(g);
     }}
-    window.addEventListener("resize", drawCurvedArrow);
+
+    // Draw after initial render, and redraw on resize
+    setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); }}, 200);
+    if (window.ResizeObserver) {{
+      new ResizeObserver(function() {{ drawCurvedArrow(); drawLArrow(); }}).observe(figEl);
+    }}
+    window.addEventListener("resize", function() {{ drawCurvedArrow(); drawLArrow(); }});
     // Redraw after any restyle (dropdown change)
-    figEl.on("plotly_restyle", function() {{ setTimeout(drawCurvedArrow, 50); }});
-    figEl.on("plotly_relayout", function() {{ setTimeout(drawCurvedArrow, 50); }});
+    figEl.on("plotly_restyle", function() {{ setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); }}, 50); }});
+    figEl.on("plotly_relayout", function() {{ setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); }}, 50); }});
 
     function updateFig() {{
       var orient = "{DEFAULT_ORIENTATION}";
