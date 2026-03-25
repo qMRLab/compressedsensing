@@ -1098,15 +1098,15 @@ def make_embeddable_html(orientations=ORIENTATIONS):
       path.setAttribute("marker-end", "url(#arrowhead-kl)");
       g.appendChild(path);
 
-      // Label "Iterate" at the control point
+      // Label "Converged" at the control point of the downward arrow
       var label = document.createElementNS(ns, "text");
-      label.setAttribute("x", cx + 1);
+      label.setAttribute("x", cx-1);
       label.setAttribute("y", cy);
       label.setAttribute("fill", "#333");
       label.setAttribute("font-size", "28");
       label.setAttribute("font-family", "sans-serif");
       label.setAttribute("dominant-baseline", "middle");
-      label.textContent = "Iterate";
+      label.textContent = "Converged";
       g.appendChild(label);
 
       svg.appendChild(g);
@@ -1181,15 +1181,97 @@ def make_embeddable_html(orientations=ORIENTATIONS):
       svg.appendChild(g);
     }}
 
-    // Draw after initial render, and redraw on resize
-    setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); }}, 200);
-    if (window.ResizeObserver) {{
-      new ResizeObserver(function() {{ drawCurvedArrow(); drawLArrow(); }}).observe(figEl);
+    // ── SVG curved arrow pointing UP (sideways U curving left) ──────────
+    function drawCurvedArrowUp() {{
+      var gd = figEl;
+      var layout = gd._fullLayout;
+      if (!layout) return;
+
+      // Paper-space coords — same origin as downward arrow (A), curves right then UP
+      var start_px = 0.70;   // x: same origin as downward arrow
+      var start_py = 0.265;  // y: same origin as downward arrow (row 4)
+      var end_px   = 0.85;   // x: destination column
+      var end_py   = 0.38;   // y: destination (row 3 area) — arrowhead here
+
+      // Convert paper coords to pixel coords
+      var plotArea = layout._size;
+      var x_start = plotArea.l + start_px * plotArea.w;
+      var y_start = plotArea.t + (1 - start_py) * plotArea.h;
+      var x_end   = plotArea.l + end_px * plotArea.w;
+      var y_end   = plotArea.t + (1 - end_py) * plotArea.h;
+
+      // Control point: curve to the right
+      var bulge = plotArea.w * 0;
+      var cx = Math.max(x_start, x_end) + bulge;
+      var cy = (y_start + y_end) / 2;
+
+      // Find or create the SVG overlay group
+      var svg = gd.querySelector("svg.main-svg");
+      if (!svg) return;
+      var existingG = svg.querySelector("#curved-arrow-up");
+      if (existingG) existingG.remove();
+
+      var ns = "http://www.w3.org/2000/svg";
+      var g = document.createElementNS(ns, "g");
+      g.setAttribute("id", "curved-arrow-up");
+
+      // Arrowhead marker
+      var defs = svg.querySelector("defs");
+      if (!defs) {{
+        defs = document.createElementNS(ns, "defs");
+        svg.insertBefore(defs, svg.firstChild);
+      }}
+      var existingMarker = defs.querySelector("#arrowhead-up");
+      if (existingMarker) existingMarker.remove();
+
+      var marker = document.createElementNS(ns, "marker");
+      marker.setAttribute("id", "arrowhead-up");
+      marker.setAttribute("markerWidth", "10");
+      marker.setAttribute("markerHeight", "7");
+      marker.setAttribute("refX", "9");
+      marker.setAttribute("refY", "3.5");
+      marker.setAttribute("orient", "auto");
+      var polygon = document.createElementNS(ns, "polygon");
+      polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+      polygon.setAttribute("fill", "#333");
+      marker.appendChild(polygon);
+      defs.appendChild(marker);
+
+      // Curved path (start to end, arrow at end/top)
+      var path = document.createElementNS(ns, "path");
+      path.setAttribute("d",
+        "M " + x_start + " " + y_start +
+        " Q " + cx + " " + cy + " " + x_end + " " + y_end
+      );
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "#333");
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("marker-end", "url(#arrowhead-up)");
+      g.appendChild(path);
+
+      // Label "Iterate" at the control point of the upward arrow
+      var label = document.createElementNS(ns, "text");
+      label.setAttribute("x", cx + 1);
+      label.setAttribute("y", cy-1);
+      label.setAttribute("fill", "#333");
+      label.setAttribute("font-size", "28");
+      label.setAttribute("font-family", "sans-serif");
+      label.setAttribute("dominant-baseline", "middle");
+      label.textContent = "Iterate";
+      g.appendChild(label);
+
+      svg.appendChild(g);
     }}
-    window.addEventListener("resize", function() {{ drawCurvedArrow(); drawLArrow(); }});
+
+    // Draw after initial render, and redraw on resize
+    setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); drawCurvedArrowUp(); }}, 200);
+    if (window.ResizeObserver) {{
+      new ResizeObserver(function() {{ drawCurvedArrow(); drawLArrow(); drawCurvedArrowUp(); }}).observe(figEl);
+    }}
+    window.addEventListener("resize", function() {{ drawCurvedArrow(); drawLArrow(); drawCurvedArrowUp(); }});
     // Redraw after any restyle (dropdown change)
-    figEl.on("plotly_restyle", function() {{ setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); }}, 50); }});
-    figEl.on("plotly_relayout", function() {{ setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); }}, 50); }});
+    figEl.on("plotly_restyle", function() {{ setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); drawCurvedArrowUp(); }}, 50); }});
+    figEl.on("plotly_relayout", function() {{ setTimeout(function() {{ drawCurvedArrow(); drawLArrow(); drawCurvedArrowUp(); }}, 50); }});
 
     function updateFig() {{
       var orient = "{DEFAULT_ORIENTATION}";
