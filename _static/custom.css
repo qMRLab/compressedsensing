@@ -38,8 +38,9 @@ h1 {
   color: red;
 }
 
-/* Hide right sidebar (on-page TOC / chapter headings) */
-.col-margin-right {
+/* Hide right sidebar / document outline */
+.col-margin-right,
+aside.col-screen-right {
   display: none !important;
 }
 
@@ -54,9 +55,10 @@ article.article > * {
   grid-column: page !important;
 }
 
-/* Ensure article content clears the left sidebar */
+/* Ensure article content clears the left sidebar, with some right padding */
 article.article {
   padding-left: 240px !important;
+  padding-right: 10em !important;
 }
 
 /* Notebook output blocks with figures: go full screen width */

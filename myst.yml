@@ -25,6 +25,7 @@ project:
     - file: index.md
     - title: Course Content
       children:
+        - file: content/00_wavelet_intro.ipynb
         - file: content/01_introduction.md
         - file: content/02_mri_application.md
         - file: content/03_fig2_demo.ipynb
@@ -34,3 +35,4 @@ site:
   options:
     logo_text: CS for MRI
     style: ./_static/custom.css
+    hide_outline: true
