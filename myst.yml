@@ -26,6 +26,7 @@ project:
     - title: Course Content
       children:
         - file: content/00_wavelet_intro.ipynb
+        - file: content/01_2d_wavelet_primer.ipynb
         - file: content/01_introduction.md
         - file: content/02_mri_application.md
         - file: content/03_fig2_demo.ipynb
