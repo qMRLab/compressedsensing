@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Introduction to Wavelet Decomposition</title>
+<script>
+MathJax = {
+  tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'STIX Two Text', 'Times New Roman', serif;
+  color: #222;
+  background: #fff;
+  margin: 0;
+  padding: 2rem 1rem;
+  line-height: 1.7;
+}
+
+main {
+  max-width: 42rem;
+  margin: 0 auto;
+}
+
+h1 {
+  color: #342727;
+  font-size: 2rem;
+  margin-bottom: 0.25rem;
+}
+
+h2 {
+  color: #342727;
+  font-size: 1.4rem;
+  margin-top: 2.5rem;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 0.3rem;
+}
+
+h3 {
+  font-size: 1.1rem;
+  margin-top: 0;
+  color: #555;
+  font-weight: 400;
+}
+
+p {
+  text-align: justify;
+}
+
+a { color: #870000; }
+a:visited { color: #6f42c1; }
+a:hover { color: #b22222; }
+
+hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 2.5rem 0;
+}
+
+blockquote {
+  margin: 1.5rem 0;
+  padding: 0.8rem 1.2rem;
+  background: #f9f6f2;
+  border-left: 3px solid #870000;
+  color: #444;
+  font-size: 0.92rem;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+blockquote em {
+  font-style: italic;
+}
+
+code {
+  font-size: 0.9em;
+  background: #f4f4f4;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+strong {
+  font-weight: 700;
+}
+
+.preamble {
+  margin-bottom: 2rem;
+}
+
+.preamble p {
+  margin: 0.5rem 0;
+}
+
+.summary {
+  background: #f9f6f2;
+  padding: 1.2rem 1.5rem;
+  border-radius: 4px;
+  margin-top: 2rem;
+}
+
+.summary h2 {
+  border-bottom: none;
+  margin-top: 0;
+  padding-bottom: 0;
+}
+
+.closing {
+  text-align: right;
+  font-style: italic;
+  margin-top: 2rem;
+  font-size: 1.1rem;
+}
+
+.MathJax { font-size: 1em !important; }
+
+/* --- interactive controls --- */
+.controls-panel {
+  background: #f9f6f2;
+  border: 1px solid #e0dcd6;
+  border-radius: 4px;
+  padding: 1rem 1.2rem;
+  margin: 1.5rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem 1.5rem;
+  align-items: end;
+}
+
+.controls-panel label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: #555;
+  gap: 0.2rem;
+}
+
+.controls-panel input[type="number"],
+.controls-panel select {
+  font-family: 'STIX Two Text', serif;
+  font-size: 0.9rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  width: 7rem;
+}
+
+.controls-panel select { width: 8rem; }
+
+.plot-container {
+  margin: 1rem 0 2rem;
+}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Introduction to Wavelet Decomposition</h1>
+<h3>A Discovery-Based Exam</h3>
+
+<hr>
+
+<div class="preamble">
+<p><strong>Philosophy.</strong> This exam is modelled after a Fourier decomposition exam by Prof. Normand Beaudoin (Universit&eacute; de Moncton, 2008). That exam forced you to <em>discover</em> the properties of spectral decomposition by trying incomplete tools and watching them fail. This exam follows the same arc for wavelets.</p>
+
+<p>You will start with a kernel that cannot possibly work, fix its deficiencies one by one, and arrive at a working wavelet transform not because you memorised the axioms, but because you derived each one from necessity. By the end, you will understand why wavelets have the properties they do, how the forward and inverse transforms work, and how compression falls out naturally.</p>
+
+<p><strong>Tools.</strong> You are encouraged to use Maple, MATLAB, Python, or any computational tool. Show all important steps and explain your reasoning at every stage. A correct answer without explanation will receive at most half marks.</p>
+
+<p><strong>Signal design.</strong> The signal you will build contains a loud high frequency and a quiet low frequency inside a smooth window. The 1:10 amplitude ratio means the slow oscillation is nearly invisible in the raw signal. As you progress through the questions, you will watch the wavelet transform <em>reveal</em> the hidden frequency, separate the two components into different scales, remove the dominant one to expose the quiet one, and compress by discarding near-zero coefficients.</p>
+</div>
+
+<hr>
+
+<h2>Question 1. Build your signal</h2>
+
+<p>A) Define a signal $h(x)$ of the form:</p>
+
+$$h(x) = w(x,\,\sigma) \cdot \bigl[\sin(\omega_1 x) + 10\cos(\omega_2 x)\bigr]$$
+
+<p>where $w(x, \sigma)$ is a smooth window function (e.g. a Gaussian) with a width parameter $\sigma$, $\omega_1$ is a low frequency with a small amplitude, and $\omega_2$ is a high frequency with a large amplitude. The 1:10 amplitude ratio is deliberate: the slow oscillation should be nearly invisible in the raw signal but clearly visible in the wavelet coefficients at the appropriate scale. The use of sin for one component and cos for the other ensures that $h(x)$ is neither symmetric nor anti-symmetric &mdash; a requirement inherited from the Fourier exam. Choose $\omega_1$ and $\omega_2$ sufficiently far apart. Ensure that $h(x)$ tends rapidly to zero for large $|x|$.</p>
+
+<p>B) Plot $h(x)$. The fast oscillation ($\omega_2$) should dominate visually. Can you see the slow oscillation ($\omega_1$) at all, or is it buried? This is deliberate &mdash; you will later use the wavelet transform to reveal it.</p>
+
+<p>C) Choose $\sigma$ wide enough that several full periods of $\omega_1$ fit inside the window. Now try a $\sigma$ that is too narrow &mdash; so narrow that fewer than one or two periods of $\omega_1$ fit inside. Plot both cases. In the narrow case, can you distinguish the slow oscillation from a simple slope or offset? Keep the wider $\sigma$ for all subsequent questions.</p>
+
+<blockquote><p><em>Your signal plays the role of $h(x)$ in the Fourier exam. The kernels you will try in the following questions play the role of cos, sin, and complex exponentials. The window width matters practically: if $\sigma$ is too small, the low frequency doesn't have room to express itself, and no transform can recover what isn't there.</em></p></blockquote>
+
+<!-- ── Q1 interactive figure ── -->
+<div class="controls-panel">
+  <label>Window
+    <select id="q1a-window-type">
+      <option value="gaussian">Gaussian</option>
+      <option value="fermi">Fermi</option>
+    </select>
+  </label>
+
+  <span id="q1a-gaussian-params" style="display:contents">
+    <label>σ <input type="number" id="q1a-sigma" step="0.1" min="0.1"></label>
+  </span>
+
+  <span id="q1a-fermi-params" style="display:none">
+    <label>width <input type="number" id="q1a-fermi-width" step="0.5" min="0.5"></label>
+    <label>edge <input type="number" id="q1a-fermi-edge" step="0.05" min="0.01"></label>
+  </span>
+
+  <label>center <input type="number" id="q1a-center" step="0.5"></label>
+  <label>ω₁ <input type="number" id="q1a-omega1" step="0.5" min="0.1"></label>
+  <label>ω₂ <input type="number" id="q1a-omega2" step="1" min="0.1"></label>
+  <label>amp₁ <input type="number" id="q1a-amp1" step="0.5"></label>
+  <label>amp₂ <input type="number" id="q1a-amp2" step="1"></label>
+  <label>t_max <input type="number" id="q1a-tmax" step="1" min="1"></label>
+  <label>N <input type="number" id="q1a-N" step="128" min="128"></label>
+</div>
+<div id="q1a-plot" class="plot-container" style="width:100%;height:400px;"></div>
+<!-- ── /Q1 ── -->
+
+<hr>
+
+<h2>Question 2. Try a positive kernel</h2>
+
+<p>Using your signal from Question 1 (with the wider $\sigma$):</p>
+
+<p>A) Choose a smooth, positive kernel $\varphi(x)$ (for example a Gaussian) with a width parameter. Your kernel should be 32 samples long (with $N = 1024$, this ensures the kernel fits comfortably at every level of a 4-level decomposition, where the coarsest array has $N/8 = 128$ samples). Convolve it with your signal $h(x)$ at three different kernel widths. Plot the convolution output in each case.</p>
+
+<!-- ── Q2a interactive kernel plot ── -->
+<div class="controls-panel">
+  <label>Kernel length <input type="number" id="q2a-kernel-length" step="2" min="4"></label>
+  <label>σ <input type="number" id="q2a-sigma" step="0.5" min="0.5"></label>
+</div>
+<div id="q2a-plot" class="plot-container" style="width:100%;height:300px;"></div>
+<!-- ── /Q2a ── -->
+
+<p>B) Can you detect the oscillatory structure of $h(x)$ in the convolution output? Can you distinguish the two frequencies? Explain what the convolution is actually computing and why the output behaves the way it does.</p>
+
+<p>C) What is the fundamental limitation of using a kernel with nonzero mean? What property must a kernel have to detect changes rather than just smooth?</p>
+
+<blockquote><p><em>This is the analog of trying cosines only in the Fourier exam. A positive kernel is structurally incapable of seeing the detail, just as cosines alone cannot capture the odd part of $h(x)$.</em></p></blockquote>
+
+<!-- ── Q2 convolution visualizer ── -->
+<div style="margin: 1.5rem 0;">
+  <label style="font-size:0.85rem; color:#555;">Kernel position
+    <input type="range" id="q2conv-slider" style="width:100%; margin-top:0.3rem;">
+  </label>
+</div>
+<div id="q2conv-plot" class="plot-container" style="width:100%;height:500px;"></div>
+<!-- ── /Q2 conv ── -->
+
+<hr>
+
+<h2>Question 3. Try a rough, zero-mean kernel</h2>
+
+<p>A) Construct a zero-mean kernel: a function whose integral is zero. Make it deliberately rough &mdash; a sawtooth with positive and negative lobes, a clipped ramp, a triangular wave, or anything discontinuous. Convolve it with $h(x)$ at several widths.</p>
+
+<!-- ── Q3a interactive kernel plot ── -->
+<div class="controls-panel">
+  <label>Kernel type
+    <select id="q3a-kernel-type">
+      <option value="bipolar">Bipolar Gaussian</option>
+      <option value="dog">Difference of Gaussians</option>
+    </select>
+  </label>
+  <label>Length <input type="number" id="q3a-kernel-length" step="2" min="4"></label>
+  <span id="q3a-bipolar-params" style="display:contents">
+    <label>σ <input type="number" id="q3a-bipolar-sigma" step="0.5" min="0.5"></label>
+    <label>separation <input type="number" id="q3a-bipolar-sep" step="1" min="1"></label>
+  </span>
+  <span id="q3a-dog-params" style="display:none">
+    <label>σ₁ (narrow) <input type="number" id="q3a-dog-sigma1" step="0.5" min="0.5"></label>
+    <label>σ₂ (wide) <input type="number" id="q3a-dog-sigma2" step="0.5" min="1.0"></label>
+  </span>
+</div>
+<div id="q3a-plot" class="plot-container" style="width:100%;height:300px;"></div>
+<!-- ── /Q3a ── -->
+
+<p>B) Compare the output with Question 2. Can you now detect changes in the signal? Can you see evidence of the oscillatory structure?</p>
+
+<p>C) Examine the output carefully. Do you see spurious ringing, ripples, or artifacts that are not present in the original signal? If so, explain where they come from in terms of the kernel's frequency response. What property would the kernel need to eliminate these artifacts?</p>
+
+<blockquote><p><em>You have now discovered two of the core wavelet requirements: zero mean ($\int\psi = 0$) and smoothness. Each was motivated by a failure.</em></p></blockquote>
+
+<!-- ── Q3 convolution visualizer ── -->
+<div style="margin: 1.5rem 0;">
+  <label style="font-size:0.85rem; color:#555;">Kernel position
+    <input type="range" id="q3conv-slider" style="width:100%; margin-top:0.3rem;">
+  </label>
+</div>
+<div id="q3conv-plot" class="plot-container" style="width:100%;height:500px;"></div>
+<!-- ── /Q3 conv ── -->
+
+<hr>
+
+<h2>Question 4. The Haar wavelet at a single scale</h2>
+
+<p>The Haar wavelet is the simplest function that satisfies the zero-mean condition:</p>
+
+$$\psi(x) = \begin{cases} +1 & 0 \le x < \tfrac{1}{2} \\ -1 & \tfrac{1}{2} \le x < 1 \\ 0 & \text{otherwise} \end{cases}$$
+
+<p>A) Convolve $h(x)$ with the Haar wavelet at a scale matched to the high frequency $\omega_2$ (i.e., set the wavelet width to approximately one period of the fast oscillation). Plot the output. Which frequency component can you see in the coefficients?</p>
+
+<!-- ── Q4a interactive Haar kernel ── -->
+<div class="controls-panel">
+  <label>Haar width (samples) <input type="number" id="q4a-haar-width" step="2" min="2"></label>
+</div>
+<div id="q4a-plot" class="plot-container" style="width:100%;height:300px;"></div>
+<!-- ── /Q4a ── -->
+
+<p>B) Now set the scale to match the low frequency $\omega_1$ (wavelet width &asymp; one period of the slow oscillation). Plot the output. Which frequency component dominates?</p>
+
+<p>C) Can a single, fixed-scale wavelet capture both frequency components simultaneously? Explain why or why not, and state what this implies about the requirements for a complete decomposition.</p>
+
+<blockquote><p><em>This is the wavelet analog of Questions 2&ndash;3 of the Fourier exam. Just as cosines alone could not capture the odd part, a wavelet at one scale cannot capture features at a different scale. The restriction is parity in Fourier, scale in wavelets.</em></p></blockquote>
+
+<!-- ── Q4 convolution visualizer ── -->
+<div style="margin: 1.5rem 0;">
+  <label style="font-size:0.85rem; color:#555;">Kernel position
+    <input type="range" id="q4conv-slider" style="width:100%; margin-top:0.3rem;">
+  </label>
+</div>
+<div id="q4conv-plot" class="plot-container" style="width:100%;height:500px;"></div>
+<!-- ── /Q4 conv ── -->
+
+<hr>
+
+<h2>Question 5. The filter bank: applying both filters</h2>
+
+<p>Instead of convolving with the wavelet at different widths directly, the discrete wavelet transform uses a pair of short convolution filters derived from the wavelet:</p>
+
+<ul>
+<li><strong>Low-pass filter (from the scaling function $\varphi$):</strong> captures the smooth, slowly-varying part.</li>
+<li><strong>High-pass filter (from the wavelet $\psi$):</strong> captures the fast-changing detail.</li>
+</ul>
+
+<p>For the Haar wavelet, these are simply $h = [1/\sqrt{2},\; 1/\sqrt{2}]$ (low-pass) and $g = [1/\sqrt{2},\; -1/\sqrt{2}]$ (high-pass).</p>
+
+<p>A) Discretise your signal $h(x)$ into a vector of $N$ samples (choose $N$ to be a power of 2, e.g. 512 or 1024). Convolve with both filters and downsample by 2. You now have two output vectors of length $N/2$. Call them $a_1$ (from the low-pass) and $d_1$ (from the high-pass). Plot both.</p>
+
+<!-- ── Q5a controls ── -->
+<div class="controls-panel">
+  <label>Filter length <input type="number" id="q5a-filter-length" value="32" step="2" min="2"></label>
+</div>
+
+<!-- ── Q5a: high-pass filter → d₁ ── -->
+<div style="margin: 1.5rem 0;">
+  <label style="font-size:0.85rem; color:#555;">High-pass filter position
+    <input type="range" id="q5a-hi-slider" style="width:100%; margin-top:0.3rem;">
+  </label>
+</div>
+<div id="q5a-hi-plot" class="plot-container" style="width:100%;height:450px;"></div>
+
+<!-- ── Q5a: low-pass filter → a₁ ── -->
+<div style="margin: 1.5rem 0;">
+  <label style="font-size:0.85rem; color:#555;">Low-pass filter position
+    <input type="range" id="q5a-lo-slider" style="width:100%; margin-top:0.3rem;">
+  </label>
+</div>
+<div id="q5a-lo-plot" class="plot-container" style="width:100%;height:450px;"></div>
+<!-- ── /Q5a ── -->
+
+<p>B) What does $a_1$ look like compared to the original signal? What does $d_1$ look like? The original signal is dominated by the high-frequency component ($\omega_2$). Can you now see the quiet low-frequency component ($\omega_1$) emerging in $a_1$, even though it was nearly invisible in $h(x)$?</p>
+
+<p>C) Explain why you need both $a_1$ and $d_1$ to represent the original signal. What information is in $a_1$ that is absent from $d_1$, and vice versa? How does this parallel the Fourier exam's finding that you need both cosines and sines?</p>
+
+<blockquote><p><em>The scaling function $\varphi$ and the wavelet $\psi$ are complementary, just as cos and sin are complementary. $\varphi$ is "blind" to detail (like cos is blind to the odd part), and $\psi$ is blind to the overall level (like sin is blind to the even part). Together they span the full space.</em></p></blockquote>
+
+<hr>
+
+<h2>Question 6. The cascade: multi-scale decomposition</h2>
+
+<p>A) Take $a_1$ (the low-pass output from Question 5) and apply the same two filters again, followed by downsampling by 2. You now have $a_2$ (length $N/4$) and $d_2$ (length $N/4$). Repeat once more to get $a_3$ (length $N/8$) and $d_3$ (length $N/8$).</p>
+
+<!-- ── Q6a: cascade step-by-step ── -->
+<div class="controls-panel">
+  <label>Decomposition levels <input type="number" id="q6a-levels" value="3" step="1" min="1" max="8"></label>
+</div>
+<div id="q6a-plot" class="plot-container" style="width:100%;height:600px;"></div>
+<!-- ── /Q6a ── -->
+
+<p>B) Plot $d_1$, $d_2$, $d_3$, and $a_3$ stacked vertically, aligned by position in the signal. At which level do the high-frequency oscillations ($\omega_2$) appear? At which level do the low-frequency oscillations ($\omega_1$) appear? What does $a_3$ contain?</p>
+
+<!-- ── Q6b: stacked decomposition ── -->
+<div id="q6b-plot" class="plot-container" style="width:100%;height:600px;"></div>
+<p style="font-size:0.85rem; color:#555; margin-top:0.3rem;">Total coefficients: <span id="q6b-count"></span></p>
+<!-- ── /Q6b ── -->
+
+<p>C) Verify that the total number of coefficients stored ($|d_1| + |d_2| + |d_3| + |a_3|$) equals $N$, the original number of samples. Explain why this is the case and why it matters for compression.</p>
+
+<p>D) Why does each level operate on the previous level's low-pass output rather than on the original signal? What would happen (in terms of redundancy and total number of coefficients) if every level operated on the original instead?</p>
+
+<blockquote><p><em>This is the central structural question. The cascade gives you a non-redundant decomposition. Operating on the original at every scale (the CWT approach) is valid but redundant &mdash; you get more coefficients than input samples and cannot compress.</em></p></blockquote>
+
+<hr>
+
+<h2>Question 7. Reconstruction from partial information</h2>
+
+<blockquote>
+<p><em><strong>How reconstruction works.</strong> The decomposition at each level was: convolve with a filter, then downsample by 2. Reconstruction reverses both operations at each level, working from the coarsest level back to the finest.</em></p>
+
+<p><em>To reconstruct $a_{k-1}$ from $a_k$ and $d_k$:</em></p>
+<ol>
+<li><em><strong>Upsample</strong> $a_k$ by 2: insert a zero after every sample, e.g. $[x, y, z] \to [x, 0, y, 0, z, 0]$.</em></li>
+<li><em><strong>Convolve</strong> the upsampled $a_k$ with the synthesis low-pass filter $\tilde{h}$.</em></li>
+<li><em><strong>Upsample</strong> $d_k$ by 2 in the same way.</em></li>
+<li><em><strong>Convolve</strong> the upsampled $d_k$ with the synthesis high-pass filter $\tilde{g}$.</em></li>
+<li><em><strong>Add</strong> the two results element-wise: $a_{k-1} = (\tilde{h} * (\uparrow 2\, a_k)) + (\tilde{g} * (\uparrow 2\, d_k))$.</em></li>
+</ol>
+
+<p><em>For the Haar wavelet the synthesis filters are $\tilde{h} = [1/\sqrt{2},\; 1/\sqrt{2}]$ and $\tilde{g} = [-1/\sqrt{2},\; 1/\sqrt{2}]$ (the time-reversed analysis filters). For a 3-level decomposition you repeat this three times: $a_3 + d_3 \to a_2$, then $a_2 + d_2 \to a_1$, then $a_1 + d_1 \to h(t)$.</em></p>
+</blockquote>
+
+<p>Using the checkboxes below, reconstruct the signal keeping only one set of coefficients at a time. Try each in turn: keep only $d_3$ (128 coefficients), then only $d_2$ (256 coefficients), then only $d_1$ (512 coefficients), then only $a_3$ (128 coefficients). Each reconstruction isolates the content of one level. Compare each to the original signal (1024 samples). Note that storing all four sets of coefficients ($d_1 + d_2 + d_3 + a_3$) also requires 1024 values &mdash; the decomposition is non-redundant. At which level does the high-frequency component ($\omega_2$) live? At which level does the low-frequency component ($\omega_1$) appear? Which combination of levels would you keep to reveal the hidden slow oscillation while discarding the dominant fast one?</p>
+
+<!-- ── Q7: reconstruction step-by-step ── -->
+<div class="controls-panel" id="q7a-checkboxes" style="gap: 0.5rem 1.5rem;">
+  <!-- checkboxes built dynamically by q7a.js -->
+</div>
+<div id="q7a-plot" class="plot-container" style="width:100%;height:700px;"></div>
+<div id="q7a-memory" style="margin-top:0.5rem;"></div>
+<!-- ── /Q7 ── -->
+
+<blockquote><p><em>Each detail level captures a different frequency band. By selectively keeping or removing levels, you can isolate or suppress specific frequency components &mdash; and the memory cost of each choice is visible in the coefficient count.</em></p></blockquote>
+
+<hr>
+
+<h2>Question 8. Experiment with your signal</h2>
+
+<p>Go back to Question 1 and change the parameters of your signal &mdash; try different frequencies, amplitudes, window widths, and window types. Then return to the decomposition (Question 6) and reconstruction (Question 7) and observe how the wavelet coefficients and compression behaviour change.</p>
+
+<p>A) Find a set of parameters in Question 1 for which keeping only $a_3$ in Question 7 does <em>not</em> reconstruct the signal well. Explain why &mdash; what property of the signal causes the coarsest approximation to miss important information?</p>
+
+<p>B) What happens when you make the window narrower (so that fewer periods of $\omega_1$ fit inside)? Can the wavelet transform still separate the two frequencies? Can you still recover the low-frequency component by keeping only certain levels?</p>
+
+<p>C) What happens when you bring $\omega_1$ and $\omega_2$ closer together? At what point do the two components start to overlap in the same detail levels?</p>
+
+<blockquote><p><em>The point of this question is to develop intuition for what the wavelet transform can and cannot do. The parameters you chose in Question 1 were designed to make the separation dramatic &mdash; but real signals are rarely so cooperative.</em></p></blockquote>
+
+<hr>
+
+<h2>Question 9. The wavelet transform at a glance</h2>
+
+<p>The four plots below summarise the entire wavelet pipeline. The top plot shows the original signal. The second plot shows all wavelet coefficients laid out in a single row at the original signal's length &mdash; each colour represents a different decomposition level. The third plot shows the same coefficient layout but with everything zeroed except $a_3$. The bottom plot shows the signal reconstructed from only $a_3$.</p>
+
+<p>Use the level selector from Question 6 and the signal controls from Question 1 to explore. Which colour bands carry the most energy? Which ones can you zero out with minimal reconstruction error?</p>
+
+<!-- ── Q9: wavelet transform summary ── -->
+<div id="q9-plot" class="plot-container" style="width:100%;height:700px;"></div>
+<!-- ── /Q9 ── -->
+
+<p>If you were to extend this to two dimensions (e.g. an image), how would you approach the problem?</p>
+
+<p class="closing"><em>Bon travail.</em></p>
+
+</main>
+
+<script src="js/signal.js"></script>
+<script src="js/q1a.js"></script>
+<script src="js/q2a.js"></script>
+<script src="js/q2conv.js"></script>
+<script src="js/q3a.js"></script>
+<script src="js/q3conv.js"></script>
+<script src="js/q4a.js"></script>
+<script src="js/q4conv.js"></script>
+<script src="js/q5a.js"></script>
+<script src="js/q6.js"></script>
+<script src="js/q7a.js"></script>
+<script src="js/q9.js"></script>
+</body>
+</html>
