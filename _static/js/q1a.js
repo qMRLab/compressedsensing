@@ -9,7 +9,7 @@
 
   /* ---------- default parameter values ---------- */
   var defaults = {
-    windowType: "gaussian",
+    windowType: "fermi",
     sigma: 3.0,
     fermiWidth: 6.0,
     fermiEdge: 0.3,
@@ -17,7 +17,7 @@
     omega1: 2.0,
     omega2: 20.0,
     amp1: 1.0,
-    amp2: 10.0,
+    amp2: 1.0,
     tMax: 10.0,
     N: 1024,
   };
@@ -90,7 +90,7 @@
     ];
 
     var layout = {
-      title: { text: "h(t) = w(t) · [sin(ω₁t) + 10 cos(ω₂t)]", font: { family: "STIX Two Text", size: 16 } },
+      title: { text: "h(t) = w(t) · [amp₁ sin(ω₁t) + amp₂ cos(ω₂t)]", font: { family: "STIX Two Text", size: 16 } },
       xaxis: { title: "t", zeroline: true },
       yaxis: { title: "h(t)", zeroline: true },
       font: { family: "STIX Two Text" },
